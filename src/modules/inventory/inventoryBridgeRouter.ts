@@ -1,5 +1,5 @@
 import Busboy from "busboy";
-import { Router, type Request, type Response } from "express";
+import { Router, type Request, type Response as ExpressResponse } from "express";
 
 import {
   forwardInventoryImageCleanup,
@@ -67,7 +67,7 @@ export function createInventoryBridgeRouter() {
   return router;
 }
 
-async function sendUpstreamJson(res: Response, upstream: Response, nonJsonMessage: string) {
+async function sendUpstreamJson(res: ExpressResponse, upstream: globalThis.Response, nonJsonMessage: string) {
   const responseText = await upstream.text();
   let responseBody: { message?: unknown } | Record<string, unknown>;
 
