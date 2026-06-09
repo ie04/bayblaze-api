@@ -1,0 +1,46 @@
+name: Deploy BayBlaze API
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: bayblaze-api-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy on VPS
+    runs-on:
+      - self-hosted
+      - Linux
+      - X64
+      - bayblaze-api
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify production env exists
+        run: |
+          test -f /opt/bayblaze/bayblaze-api/.env.production
+
+      - name: Build TypeScript
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build Docker image
+        run: |
+          docker compose -p bayblaze-api -f docker-compose.prod.yml build
+
+      - name: Recreate BayBlaze API container
+        run: |
+          docker compose -p bayblaze-api -f docker-compose.prod.yml up -d --remove-orphans
+
+      - name: Show container status
+        run: |
+          docker compose -p bayblaze-api -f docker-compose.prod.yml ps
+          docker compose -p bayblaze-api -f docker-compose.prod.yml logs --tail=120 bayblaze-api
