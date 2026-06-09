@@ -5,6 +5,7 @@ import pinoHttp from "pino-http";
 
 import { env } from "./config/env";
 import { registerRoutes } from "./http/routes";
+import { createInventoryBridgeRouter } from "./modules/inventory/inventoryBridgeRouter";
 
 export function createApp() {
   const app = express();
@@ -46,6 +47,8 @@ export function createApp() {
   });
 
   app.use("/v1", registerRoutes());
+
+  app.use("/v1", createInventoryBridgeRouter());
 
   app.use((_req, res) => {
     res.status(404).json({
