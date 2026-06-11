@@ -136,9 +136,9 @@ The current bridge pattern is:
 frontend browser → app-owned server boundary → bayblaze-api → Medusa/IsoChronos
 ```
 
-Short-term app integrations may keep direct Medusa/IsoChronos fallbacks for
-safe rollout, but new frontend-facing backend work should prefer `bayblaze-api`
-as the upstream. `bayblaze-api` forwards to:
+`bayblaze-inventory` must use this bridge strictly for inventory/product and
+inventory-image workflows; its Vercel/server boundary should not fall back to
+direct Medusa routes or hold Medusa service tokens. `bayblaze-api` forwards to:
 
 ```env
 MEDUSA_DRIVER_QUEUE_PATH=/admin/bayblaze/driver-queues/{uid}
