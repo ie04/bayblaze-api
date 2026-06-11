@@ -5,7 +5,10 @@ import pinoHttp from "pino-http";
 
 import { env } from "./config/env";
 import { registerRoutes } from "./http/routes";
+import { createCheckoutBridgeRouter } from "./modules/checkout/checkoutBridgeRouter";
+import { createDriverBridgeRouter } from "./modules/drivers/driverBridgeRouter";
 import { createInventoryBridgeRouter } from "./modules/inventory/inventoryBridgeRouter";
+import { createOrderBridgeRouter } from "./modules/orders/orderBridgeRouter";
 
 export function createApp() {
   const app = express();
@@ -49,6 +52,9 @@ export function createApp() {
   app.use("/v1", registerRoutes());
 
   app.use("/v1", createInventoryBridgeRouter());
+  app.use("/v1", createCheckoutBridgeRouter());
+  app.use("/v1", createOrderBridgeRouter());
+  app.use("/v1", createDriverBridgeRouter());
 
   app.use((_req, res) => {
     res.status(404).json({

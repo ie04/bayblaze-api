@@ -108,6 +108,47 @@ The apps should not need to know internal service details such as:
 * upload storage paths
 * driver Firebase vs IsoChronos Firebase project split
 
+## June 2026 Common API Bridge
+
+`bayblaze-api` now exposes the first shared bridge routes for existing
+BayBlaze backend services:
+
+```text
+GET/POST /v1/inventory
+POST     /v1/inventory/images
+DELETE   /v1/inventory/images
+POST     /v1/checkout/eligibility
+POST     /v1/orders/live-tracking
+GET      /v1/drivers/:uid/queue
+POST     /v1/drivers/queues/score
+POST     /v1/drivers/location
+POST     /v1/delivery-attempts
+```
+
+These routes require `Authorization: Bearer $BAYBLAZE_API_SERVICE_TOKEN` (or
+`x-bayblaze-api-token`) from trusted app server boundaries such as Next API
+routes, Vercel functions, or Firebase Functions. Browser bundles must not embed
+this token.
+
+The current bridge pattern is:
+
+```text
+frontend browser → app-owned server boundary → bayblaze-api → Medusa/IsoChronos
+```
+
+Short-term app integrations may keep direct Medusa/IsoChronos fallbacks for
+safe rollout, but new frontend-facing backend work should prefer `bayblaze-api`
+as the upstream. `bayblaze-api` forwards to:
+
+```env
+MEDUSA_DRIVER_QUEUE_PATH=/admin/bayblaze/driver-queues/{uid}
+MEDUSA_DELIVERY_ATTEMPT_PATH=/admin/bayblaze/delivery-attempts
+ISOCHRONOS_PRECHECKOUT_ELIGIBILITY_PATH=/routing/pre-checkout/eligibility
+ISOCHRONOS_ORDER_TRACKING_PATH=/orders/live-tracking
+ISOCHRONOS_QUEUE_SCORE_PATH=/driver-queues/score
+ISOCHRONOS_DRIVER_LOCATION_PATH=/driver-locations
+```
+
 ## Module boundaries
 
 Keep routes thin. Business logic belongs in modules/services.
