@@ -57,6 +57,14 @@ export function createInventoryBridgeRouter() {
   router.get("/inventory/images/:filename", requireInventoryAppToken, async (req, res, next) => {
     try {
       const filename = readSafeImageFilename(req.params.filename);
+
+      if (!filename) {
+        res.status(400).json({
+          message: "Inventory image filename is invalid.",
+        });
+        return;
+      }
+
       const upstream = await forwardInventoryImageRead(filename);
 
       await sendUpstreamBinary(res, upstream);
@@ -230,7 +238,7 @@ function readSafeImageFilename(value: unknown) {
   const filename = readHeader(value);
 
   if (!/^[a-zA-Z0-9._-]+\.(jpg|jpeg|png|webp|gif)$/i.test(filename)) {
-    throw new Error("Inventory image filename is invalid.");
+    return "";
   }
 
   return filename;
