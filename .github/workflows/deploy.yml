@@ -47,8 +47,11 @@ jobs:
           mkdir -p "$DEPLOY_DIR"
           rsync -a --delete \
             --exclude .env.production \
+            --exclude dist \
+            --exclude node_modules \
             --exclude uploads \
             ./ "$DEPLOY_DIR"/
+          rm -rf "$DEPLOY_DIR/dist" "$DEPLOY_DIR/node_modules"
 
       - name: Build Docker image
         working-directory: ${{ env.DEPLOY_DIR }}
