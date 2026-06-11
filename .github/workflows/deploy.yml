@@ -12,6 +12,7 @@ concurrency:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  DEPLOY_DIR: /opt/bayblaze/bayblaze-api
 
 jobs:
   deploy:
@@ -28,7 +29,7 @@ jobs:
 
       - name: Verify production env exists
         run: |
-          test -f /opt/bayblaze/bayblaze-api/.env.production
+          test -f "$DEPLOY_DIR/.env.production"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -41,15 +42,26 @@ jobs:
           npm ci
           npm run build
 
+      - name: Sync release to stable app directory
+        run: |
+          mkdir -p "$DEPLOY_DIR"
+          rsync -a --delete \
+            --exclude .env.production \
+            --exclude uploads \
+            ./ "$DEPLOY_DIR"/
+
       - name: Build Docker image
+        working-directory: ${{ env.DEPLOY_DIR }}
         run: |
           docker compose -p bayblaze-api -f docker-compose.prod.yml build
 
       - name: Recreate BayBlaze API container
+        working-directory: ${{ env.DEPLOY_DIR }}
         run: |
           docker compose -p bayblaze-api -f docker-compose.prod.yml up -d --remove-orphans
 
       - name: Show container status
+        working-directory: ${{ env.DEPLOY_DIR }}
         run: |
           docker compose -p bayblaze-api -f docker-compose.prod.yml ps
           docker compose -p bayblaze-api -f docker-compose.prod.yml logs --tail=120 bayblaze-api

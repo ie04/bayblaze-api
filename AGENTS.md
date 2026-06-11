@@ -625,6 +625,14 @@ Raw Firestore docs, Medusa records, Google Maps responses, and Twilio objects sh
 
 Use stable Docker Compose project/service names in production.
 
+Production deploys must sync the checked-out release into the stable service
+directory `/opt/bayblaze/bayblaze-api` and run Docker Compose from that
+directory. The GitHub runner workspace under
+`/home/codex-deploy/github-runners/bayblaze-api/_work/...` is transient and
+must not be the long-lived Compose working directory. Keep
+`/opt/bayblaze/bayblaze-api/.env.production` and
+`/opt/bayblaze/bayblaze-api/uploads` out of rsync deletion.
+
 If Dockerized, production should load `.env.production` and explicitly pass critical env vars when ambiguity is risky.
 
 Recommended production env includes:
