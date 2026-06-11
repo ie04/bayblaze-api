@@ -129,6 +129,9 @@ These routes require `Authorization: Bearer $BAYBLAZE_API_SERVICE_TOKEN` (or
 `x-bayblaze-api-token`) from trusted app server boundaries such as Next API
 routes, Vercel functions, or Firebase Functions. Browser bundles must not embed
 this token.
+`BAYBLAZE_API_SERVICE_TOKEN` is the single app-to-API token name for inventory
+and other trusted app server boundaries. Do not introduce inventory-specific
+token aliases unless there is a concrete rotation plan.
 
 The current bridge pattern is:
 
@@ -644,7 +647,6 @@ BAYBLAZE_PUBLIC_API_URL=https://api.bayblaze.net
 
 MEDUSA_BACKEND_URL=...
 MEDUSA_ADMIN_API_TOKEN=...
-BAYBLAZE_INVENTORY_SERVICE_TOKEN=...
 BAYBLAZE_DRIVER_SERVICE_TOKEN=...
 
 FIREBASE_PROJECT_ID=bayblaze-isochronos

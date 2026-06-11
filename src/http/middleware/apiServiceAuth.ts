@@ -1,9 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
 export function requireApiServiceToken(req: Request, res: Response, next: NextFunction) {
-  const expectedToken =
-    process.env.BAYBLAZE_API_SERVICE_TOKEN ||
-    process.env.BAYBLAZE_INVENTORY_APP_TO_API_TOKEN;
+  const expectedToken = readString(process.env.BAYBLAZE_API_SERVICE_TOKEN);
 
   if (!expectedToken) {
     return res.status(503).json({

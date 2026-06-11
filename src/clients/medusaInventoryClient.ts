@@ -12,11 +12,11 @@ function getMedusaBackendUrl() {
 
 function getInventoryServiceToken() {
   const value =
-    process.env.BAYBLAZE_INVENTORY_SERVICE_TOKEN ||
-    process.env.BAYBLAZE_DRIVER_SERVICE_TOKEN;
+    process.env.BAYBLAZE_DRIVER_SERVICE_TOKEN ||
+    process.env.BAYBLAZE_INVENTORY_SERVICE_TOKEN;
 
   if (!value) {
-    throw new Error("BAYBLAZE_INVENTORY_SERVICE_TOKEN is not configured.");
+    throw new Error("BAYBLAZE_DRIVER_SERVICE_TOKEN is not configured.");
   }
 
   return value;
