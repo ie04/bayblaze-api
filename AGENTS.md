@@ -116,6 +116,7 @@ BayBlaze backend services:
 ```text
 GET/POST /v1/inventory
 POST     /v1/inventory/images
+GET      /v1/inventory/images/:filename
 DELETE   /v1/inventory/images
 POST     /v1/checkout/eligibility
 POST     /v1/orders/live-tracking

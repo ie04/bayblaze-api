@@ -51,6 +51,14 @@ export async function forwardInventoryImageUpload(formData: FormData) {
   });
 }
 
+export async function forwardInventoryImageRead(filename: string) {
+  const medusaBackendUrl = getMedusaBackendUrl();
+
+  return fetch(`${medusaBackendUrl}/bayblaze/inventory-images/${encodeURIComponent(filename)}`, {
+    method: "GET",
+  });
+}
+
 export async function forwardInventoryImageCleanup(rawBody: string) {
   const medusaBackendUrl = getMedusaBackendUrl();
   const serviceToken = getInventoryServiceToken();
