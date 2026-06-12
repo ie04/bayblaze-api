@@ -5,3 +5,11 @@ dist
 .env.production
 .DS_Store
 *.log
+medusa/node_modules
+medusa/.turbo
+medusa/apps/backend/.medusa
+medusa/uploads
+medusa/**/dist
+medusa/**/build
+medusa/**/.env
+medusa/**/.env.*

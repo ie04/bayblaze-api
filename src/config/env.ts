@@ -12,6 +12,7 @@ const envSchema = z
     CORS_ORIGINS: z.string().optional().default(""),
 
     BAYBLAZE_API_SERVICE_TOKEN: z.string().optional(),
+    BAYBLAZE_MEDUSA_SERVICE_TOKEN: z.string().optional(),
     ACCOUNT_SESSION_SECRET: z.string().optional(),
     ACCOUNT_SESSION_TTL_SECONDS: z.coerce.number().int().positive().optional().default(60 * 60 * 24 * 14),
     DRIVER_SESSION_SECRET: z.string().optional(),

@@ -2,7 +2,8 @@
 
 ## Project role
 
-`bayblaze-api` is the shared app-facing backend boundary for BayBlaze.
+`bayblaze-api` is the shared app-facing backend boundary and backend monorepo
+for BayBlaze.
 
 BayBlaze apps should call `bayblaze-api` instead of directly integrating with backend-only services.
 
@@ -14,9 +15,9 @@ Primary clients:
 * `bayblaze-admin`
 * future `bayblaze-isochronos-console` / operations display apps
 
-Primary backend dependencies:
+Integrated backend services and dependencies:
 
-* Medusa
+* Embedded Medusa service under `medusa/`
 * IsoChronos routing/tracking modules
 * Firebase Admin SDK
 * Google Maps APIs
@@ -53,6 +54,11 @@ Medusa remains the source of truth for:
 * product images once committed to a product
 * product category metadata used by storefront/inventory sync
 
+Medusa source now lives inside this repository at `medusa/`. The previous
+standalone `bayblaze-medusa` repository is retired as an independent source of
+truth after the June 2026 consolidation. Make Medusa route/model/deployment
+changes in `bayblaze-api/medusa`, not in the old repository.
+
 Firebase remains the source of truth for live driver state and driver workflow UI data, including:
 
 * driver profiles
@@ -88,6 +94,41 @@ bayblaze-isochronos-console
         ↓
 Medusa / Firebase / Google Maps / Twilio / Storage
 ```
+
+## June 2026 Medusa Repo Consolidation
+
+`bayblaze-medusa` has been copied into this repository at `medusa/`, making
+`bayblaze-api` the repo of record for both the app-facing API and the Medusa
+commerce backend.
+
+Root commands:
+
+```bash
+npm run api:dev
+npm run api:build
+npm run medusa:install
+npm run medusa:dev
+npm run medusa:build
+npm run build:all
+```
+
+The embedded Medusa service keeps its original package/workspace shape under
+`medusa/`, including `medusa/apps/backend`, `medusa/apps/label-printer-agent`,
+Medusa Dockerfiles, and Medusa compose files. The root API Dockerfile excludes
+`medusa/` so the API image stays small; use `docker-compose.integrated.yml` or
+the Medusa compose files under `medusa/` when deploying both services from this
+repo.
+
+API-to-Medusa service auth should use one canonical secret:
+
+```env
+BAYBLAZE_MEDUSA_SERVICE_TOKEN=<shared API-to-Medusa secret>
+```
+
+Set the same value for `bayblaze-api` and the embedded `medusa` service.
+Legacy `BAYBLAZE_INVENTORY_SERVICE_TOKEN`, `BAYBLAZE_DRIVER_SERVICE_TOKEN`, and
+`MEDUSA_ADMIN_API_TOKEN` remain compatibility fallbacks only. Do not introduce
+new app-specific Medusa service token names.
 
 The apps should speak BayBlaze business language:
 
@@ -244,11 +285,13 @@ frontend browser → app-owned server boundary → bayblaze-api → Medusa / Fir
 
 `bayblaze-inventory` must use this bridge strictly for inventory/product and
 inventory-image workflows; its Vercel/server boundary should not fall back to
-direct Medusa routes or hold Medusa service tokens. `bayblaze-api` forwards to:
+direct Medusa routes or hold Medusa service tokens. `bayblaze-api` forwards to
+embedded Medusa BayBlaze routes:
 
 ```env
 MEDUSA_DRIVER_QUEUE_PATH=/admin/bayblaze/driver-queues/{uid}
 MEDUSA_DELIVERY_ATTEMPT_PATH=/admin/bayblaze/delivery-attempts
+MEDUSA_ADMIN_ORDERS_PATH=/admin/bayblaze/orders
 ```
 
 `POST /v1/checkout/eligibility`, `POST /v1/orders/live-tracking`,
@@ -736,9 +779,11 @@ NODE_ENV=production
 PORT=3040
 BAYBLAZE_PUBLIC_API_URL=https://api.bayblaze.net
 
-MEDUSA_BACKEND_URL=...
-MEDUSA_ADMIN_API_TOKEN=...
-BAYBLAZE_DRIVER_SERVICE_TOKEN=...
+MEDUSA_BACKEND_URL=http://medusa:9000
+BAYBLAZE_MEDUSA_SERVICE_TOKEN=...
+MEDUSA_DRIVER_QUEUE_PATH=/admin/bayblaze/driver-queues/{uid}
+MEDUSA_DELIVERY_ATTEMPT_PATH=/admin/bayblaze/delivery-attempts
+MEDUSA_ADMIN_ORDERS_PATH=/admin/bayblaze/orders
 
 FIREBASE_PROJECT_ID=bayblaze-isochronos
 FIRESTORE_DATABASE_ID=(default)

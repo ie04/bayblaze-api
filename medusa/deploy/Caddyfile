@@ -1,0 +1,9 @@
+api.bayblaze.net {
+	encode zstd gzip
+
+	handle /v1/* {
+		reverse_proxy bayblaze-api:3040
+	}
+
+	reverse_proxy medusa:9000
+}

@@ -1,0 +1,46 @@
+{
+  "name": "bayblaze-medusa",
+  "private": false,
+  "packageManager": "npm@10.9.2",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "start": "turbo start",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "backend:seed": "turbo seed --filter=@dtc/backend",
+    "backend:seed:bayblaze": "npm run seed:bayblaze -w @dtc/backend",
+    "backend:backfill:order-numbers": "npm run backfill:order-numbers -w @dtc/backend",
+    "backend:setup:local-delivery": "npm run setup:local-delivery -w @dtc/backend",
+    "backend:dev": "turbo dev --filter=@dtc/backend",
+    "backend:docker:build": "docker compose build medusa",
+    "backend:docker:deps": "docker compose up -d postgres redis",
+    "backend:docker:down": "docker compose down",
+    "backend:docker:logs": "docker compose logs -f medusa",
+    "backend:docker:migrate": "docker compose run --rm medusa npx medusa db:migrate",
+    "backend:docker:up": "docker compose up -d --build medusa",
+    "storefront:dev": "turbo dev --filter=@dtc/storefront",
+    "label-printer:start": "npm run start -w @dtc/label-printer-agent",
+    "label-printer:list": "npm run list:printers -w @dtc/label-printer-agent"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/react": "19.0.5",
+      "@types/react-dom": "19.0.5"
+    }
+  },
+  "devDependencies": {
+    "turbo": "^2.0.14",
+    "prettier": "^3.2.5"
+  },
+  "workspaces": [
+    "apps/**",
+    "!apps/backend/.medusa/**"
+  ],
+  "overrides": {
+    "ajv": "^8.0.0"
+  }
+}

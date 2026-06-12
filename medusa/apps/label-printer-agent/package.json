@@ -1,0 +1,22 @@
+{
+  "name": "@dtc/label-printer-agent",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Local Bayblaze thermal label print agent for Windows.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "list:printers": "node src/index.js --list-printers"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "pdf-to-printer": "^5.8.0",
+    "pdfkit": "^0.18.0",
+    "qrcode": "^1.5.4",
+    "sharp": "^0.34.5"
+  }
+}

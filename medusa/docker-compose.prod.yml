@@ -1,0 +1,71 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - medusa
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - default
+      - bayblaze_api
+
+  medusa:
+    build:
+      context: .
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      BAYBLAZE_MEDUSA_SERVICE_TOKEN: ${BAYBLAZE_MEDUSA_SERVICE_TOKEN:-}
+      BAYBLAZE_DRIVER_SERVICE_TOKEN: ${BAYBLAZE_DRIVER_SERVICE_TOKEN:-}
+      BAYBLAZE_INVENTORY_SERVICE_TOKEN: ${BAYBLAZE_INVENTORY_SERVICE_TOKEN:-}
+      BAYBLAZE_INVENTORY_IMAGE_UPLOAD_DIR: ${BAYBLAZE_INVENTORY_IMAGE_UPLOAD_DIR:-/app/uploads/bayblaze-inventory}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    expose:
+      - "9000"
+    volumes:
+      - ./uploads:/app/uploads
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      POSTGRES_DB: medusa
+      POSTGRES_USER: medusa
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medusa -d medusa"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+
+volumes:
+  caddy_data:
+  caddy_config:
+  postgres_data:
+  redis_data:
+
+networks:
+  bayblaze_api:
+    external: true
+    name: bayblaze-api_default

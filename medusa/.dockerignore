@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+.turbo
+**/.turbo
+.git
+.DS_Store
+apps/backend/.medusa
+apps/backend/.env
+apps/backend/.env.local
+apps/backend/.env.development.local
+apps/backend/.env.production.local
+npm-debug.log*
