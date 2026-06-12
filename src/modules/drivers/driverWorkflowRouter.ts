@@ -1,7 +1,15 @@
-import { Router, type NextFunction, type Response } from "express";
+import { randomUUID } from "node:crypto";
+import Busboy from "busboy";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 
+import { getBayblazeStorage } from "../../clients/firebaseAdminClient";
 import { requireDriverAuth, type DriverAuthedRequest } from "../../http/middleware/driverAuth";
+import {
+  createAllowedDriverAccount,
+  loginDriver,
+  prepareDriverAccess,
+} from "./driverAuthService";
 import {
   ApiRequestError,
   clockInDriver,
@@ -17,6 +25,21 @@ import {
   syncDriverDeliveryQueue,
   writeDriverLocationSnapshot,
 } from "./driverWorkflowService";
+
+const authEmailSchema = z.object({
+  email: z.string().min(1),
+});
+
+const authCreateSchema = z.object({
+  code: z.string().min(1),
+  email: z.string().min(1),
+  password: z.string().min(1),
+});
+
+const authLoginSchema = z.object({
+  email: z.string().min(1),
+  password: z.string().min(1),
+});
 
 const profileSchema = z.object({
   firstName: z.string().optional(),
@@ -65,6 +88,33 @@ const notificationTokenSchema = z.object({
 
 export function createDriverWorkflowRouter() {
   const router = Router();
+
+  router.post("/driver/auth/access", async (req, res, next) => {
+    try {
+      const parsed = authEmailSchema.parse(req.body);
+      res.json(await prepareDriverAccess(parsed.email));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/driver/auth/accounts", async (req, res, next) => {
+    try {
+      const parsed = authCreateSchema.parse(req.body);
+      res.json(await createAllowedDriverAccount(parsed.email, parsed.code, parsed.password));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/driver/auth/login", async (req, res, next) => {
+    try {
+      const parsed = authLoginSchema.parse(req.body);
+      res.json(await loginDriver(parsed.email, parsed.password));
+    } catch (caught) {
+      next(caught);
+    }
+  });
 
   router.use("/driver/me", requireDriverAuth);
 
@@ -166,6 +216,48 @@ export function createDriverWorkflowRouter() {
     }
   });
 
+  router.post("/driver/me/profile-photo", async (req: DriverAuthedRequest, res, next) => {
+    try {
+      const auth = readDriverAuth(req);
+      const upload = await readMultipartImageUpload(req, "photo");
+      const extension = readImageExtension(upload.fileName, upload.mimeType);
+      const path = `driver-profile-photos/${auth.uid}/profile.${extension}`;
+      const photoUrl = await uploadDriverImage(path, upload);
+
+      res.json({
+        profilePhotoPath: path,
+        profilePhotoUrl: photoUrl,
+      });
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/driver/me/delivery-attempt-photos", async (req: DriverAuthedRequest, res, next) => {
+    try {
+      const auth = readDriverAuth(req);
+      const upload = await readMultipartImageUpload(req, "photo");
+      const fields = upload.fields;
+      const orderId = readSafePathSegment(fields.orderId);
+      const type = fields.type === "id_photo" ? "id_photo" : "merchant_invoice_photo";
+
+      if (!orderId) {
+        throw new ApiRequestError(400, "Order ID is required for delivery attempt photo upload.");
+      }
+
+      const extension = readImageExtension(upload.fileName, upload.mimeType);
+      const path = `delivery-attempt-photos/${auth.uid}/${orderId}/${type}-${Date.now()}.${extension}`;
+      const photoUrl = await uploadDriverImage(path, upload);
+
+      res.json({
+        photoPath: path,
+        photoUrl,
+      });
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
   router.post("/driver/me/notification-tokens", async (req: DriverAuthedRequest, res, next) => {
     try {
       const parsed = notificationTokenSchema.parse(req.body);
@@ -219,4 +311,124 @@ function readDriverAuth(req: DriverAuthedRequest) {
 
 function readRouteParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
+type ParsedImageUpload = {
+  buffer: Buffer;
+  fields: Record<string, string>;
+  fileName: string;
+  mimeType: string;
+};
+
+function readMultipartImageUpload(req: Request, fieldName: string) {
+  return new Promise<ParsedImageUpload>((resolve, reject) => {
+    const contentType = readHeader(req.headers["content-type"]);
+
+    if (!contentType.includes("multipart/form-data")) {
+      reject(new ApiRequestError(400, "Driver image upload must be multipart/form-data."));
+      return;
+    }
+
+    const parser = Busboy({
+      headers: { "content-type": contentType },
+      limits: {
+        files: 1,
+        fileSize: 4 * 1024 * 1024,
+      },
+    });
+    const chunks: Buffer[] = [];
+    const fields: Record<string, string> = {};
+    let fileName = "driver-photo.jpg";
+    let mimeType = "image/jpeg";
+    let sawImage = false;
+    let settled = false;
+
+    function fail(error: Error) {
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    }
+
+    parser.on("field", (name, value) => {
+      fields[name] = value;
+    });
+
+    parser.on("file", (name, file, info) => {
+      if (name !== fieldName) {
+        file.resume();
+        return;
+      }
+
+      sawImage = true;
+      fileName = info.filename || fileName;
+      mimeType = info.mimeType || mimeType;
+
+      file.on("data", (chunk: Buffer) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      });
+      file.on("limit", () => fail(new ApiRequestError(413, "Driver image is too large.")));
+      file.on("error", (error) => fail(error instanceof Error ? error : new Error("Driver image upload failed.")));
+    });
+
+    parser.on("error", (error) => fail(error instanceof Error ? error : new Error("Driver image upload parsing failed.")));
+    parser.on("finish", () => {
+      if (settled) return;
+      if (!sawImage || chunks.length === 0) {
+        fail(new ApiRequestError(400, "Driver image upload is required."));
+        return;
+      }
+
+      settled = true;
+      resolve({
+        buffer: Buffer.concat(chunks),
+        fields,
+        fileName,
+        mimeType,
+      });
+    });
+
+    req.pipe(parser);
+  });
+}
+
+async function uploadDriverImage(path: string, upload: ParsedImageUpload) {
+  const bucket = getBayblazeStorage().bucket();
+  const file = bucket.file(path);
+  const token = randomUUID();
+
+  await file.save(upload.buffer, {
+    contentType: upload.mimeType,
+    metadata: {
+      metadata: {
+        firebaseStorageDownloadTokens: token,
+      },
+    },
+    resumable: false,
+  });
+
+  return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`;
+}
+
+function readHeader(value: unknown) {
+  if (Array.isArray(value)) {
+    return value[0] ?? "";
+  }
+
+  return typeof value === "string" ? value : "";
+}
+
+function readImageExtension(fileName: string, mimeType: string) {
+  const fileExtension = fileName.split(".").pop()?.toLowerCase();
+  if (fileExtension && ["jpg", "jpeg", "png", "webp"].includes(fileExtension)) {
+    return fileExtension === "jpeg" ? "jpg" : fileExtension;
+  }
+
+  if (mimeType === "image/png") return "png";
+  if (mimeType === "image/webp") return "webp";
+  return "jpg";
+}
+
+function readSafePathSegment(value: unknown) {
+  return typeof value === "string" ? value.replace(/[^a-zA-Z0-9._-]/g, "_") : "";
 }

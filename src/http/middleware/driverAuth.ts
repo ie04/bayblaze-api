@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { getBayblazeAuth } from "../../clients/firebaseAdminClient";
+import { verifyDriverSessionToken } from "../../modules/drivers/driverSession";
 
 export type DriverAuthedRequest = Request & {
   driverAuth?: {
@@ -23,6 +24,15 @@ export async function requireDriverAuth(
   }
 
   try {
+    const session = verifyDriverSessionToken(token);
+    if (session) {
+      req.driverAuth = {
+        uid: session.uid,
+        email: session.email,
+      };
+      return next();
+    }
+
     const decoded = await getBayblazeAuth().verifyIdToken(token);
     req.driverAuth = {
       uid: decoded.uid,

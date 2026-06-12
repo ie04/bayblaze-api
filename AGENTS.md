@@ -113,13 +113,14 @@ The apps should not need to know internal service details such as:
 The target backend shape is now a single Firestore-backed operational database
 behind `bayblaze-api`.
 
-* Driver browser code must call `bayblaze-api` for driver profiles, vehicles,
-  queues, clock state, delivery attempts, notification tokens, and live location
-  writes. It should not import Firestore collection names or write Firestore docs
-  directly.
-* Firebase Authentication may remain the driver sign-in provider, but API routes
-  should verify driver Firebase ID tokens server-side and then read/write
-  Firestore through Firebase Admin.
+* Driver browser code must call `bayblaze-api` for auth/account flows, driver
+  sessions, profile and delivery-attempt photo uploads, driver profiles,
+  vehicles, queues, clock state, delivery attempts, notification tokens, and
+  live location writes. It should not import Firebase SDKs, Firestore collection
+  names, Firebase Storage APIs, or write Firestore docs directly.
+* Firebase Authentication may remain the underlying password provider, but API
+  routes own sign-in/signup, issue BayBlaze driver session tokens, and then
+  read/write Firestore through Firebase Admin.
 * `bayblaze-isochronos` is being deconstructed into internal
   `src/modules/isochronos/*` modules in `bayblaze-api`. Do not add new app-facing
   dependencies on the standalone IsoChronos HTTP service.
@@ -132,6 +133,7 @@ Current first merged API routes:
 ```text
 GET    /v1/driver/me/profile
 PUT    /v1/driver/me/profile
+POST   /v1/driver/me/profile-photo
 GET    /v1/driver/me/vehicles/available
 POST   /v1/driver/me/vehicles/link
 POST   /v1/driver/me/clock-in
@@ -140,13 +142,23 @@ GET    /v1/driver/me/queue
 POST   /v1/driver/me/queue/sync
 POST   /v1/driver/me/location
 POST   /v1/driver/me/delivery-attempts
+POST   /v1/driver/me/delivery-attempt-photos
 POST   /v1/driver/me/notification-tokens
 DELETE /v1/driver/me/notification-tokens/:tokenId
 ```
 
-These routes require a driver Firebase ID token, not
-`BAYBLAZE_API_SERVICE_TOKEN`. Existing trusted bridge routes under
-`/v1/drivers/*` still use the service token for server-to-server callers.
+Driver auth/account routes are:
+
+```text
+POST   /v1/driver/auth/access
+POST   /v1/driver/auth/accounts
+POST   /v1/driver/auth/login
+```
+
+The `/v1/driver/me/*` routes require a BayBlaze driver session bearer token, not
+`BAYBLAZE_API_SERVICE_TOKEN`. Firebase ID tokens remain accepted as a rollout
+fallback. Existing trusted bridge routes under `/v1/drivers/*` still use the
+service token for server-to-server callers.
 
 ## June 2026 Common API Bridge
 

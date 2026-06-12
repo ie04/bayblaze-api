@@ -12,6 +12,8 @@ const envSchema = z
     CORS_ORIGINS: z.string().optional().default(""),
 
     BAYBLAZE_API_SERVICE_TOKEN: z.string().optional(),
+    DRIVER_SESSION_SECRET: z.string().optional(),
+    DRIVER_SESSION_TTL_SECONDS: z.coerce.number().int().positive().optional().default(60 * 60 * 24 * 14),
 
     MEDUSA_BACKEND_URL: z.string().optional(),
     MEDUSA_ADMIN_API_TOKEN: z.string().optional(),
@@ -35,6 +37,12 @@ const envSchema = z
     FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
     FIREBASE_SERVICE_ACCOUNT_JSON_BASE64: z.string().optional(),
     FIREBASE_STORAGE_BUCKET: z.string().optional(),
+    FIREBASE_WEB_API_KEY: z.string().optional(),
+
+    RESEND_API_KEY: z.string().optional(),
+    DRIVER_EMAIL_FROM: z.string().optional(),
+    DRIVER_EMAIL_REPLY_TO: z.string().optional(),
+    DRIVER_SIGNUP_CODE_TTL_MINUTES: z.coerce.number().int().positive().optional().default(15),
 
     DRIVER_FIREBASE_PROJECT_ID: z.string().optional(),
     DRIVER_FIRESTORE_DATABASE_ID: z.string().optional(),
