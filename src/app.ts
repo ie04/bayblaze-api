@@ -5,6 +5,8 @@ import pinoHttp from "pino-http";
 
 import { env } from "./config/env";
 import { registerRoutes } from "./http/routes";
+import { createAccountRouter } from "./modules/accounts/accountRouter";
+import { createAdminRouter } from "./modules/admin/adminRouter";
 import { createCheckoutBridgeRouter } from "./modules/checkout/checkoutBridgeRouter";
 import { createDriverBridgeRouter } from "./modules/drivers/driverBridgeRouter";
 import { createDriverWorkflowRouter } from "./modules/drivers/driverWorkflowRouter";
@@ -53,6 +55,8 @@ export function createApp() {
 
   app.use("/v1", registerRoutes());
 
+  app.use("/v1", createAccountRouter());
+  app.use("/v1", createAdminRouter());
   app.use("/v1", createInventoryBridgeRouter());
   app.use("/v1", createCheckoutBridgeRouter());
   app.use("/v1", createOrderBridgeRouter());

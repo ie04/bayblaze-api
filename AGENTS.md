@@ -11,6 +11,7 @@ Primary clients:
 * `bayblaze-storefront`
 * `bayblaze-driver`
 * `bayblaze-inventory`
+* `bayblaze-admin`
 * future `bayblaze-isochronos-console` / operations display apps
 
 Primary backend dependencies:
@@ -159,6 +160,55 @@ The `/v1/driver/me/*` routes require a BayBlaze driver session bearer token, not
 `BAYBLAZE_API_SERVICE_TOKEN`. Firebase ID tokens remain accepted as a rollout
 fallback. Existing trusted bridge routes under `/v1/drivers/*` still use the
 service token for server-to-server callers.
+
+## June 2026 Universal Account And Admin Dashboard Direction
+
+`bayblaze-api` now owns the universal BayBlaze account boundary for all app
+roles. Firebase Auth remains the password provider, but account authorization is
+represented by API-owned Firestore records in `accounts/{uid}`:
+
+```text
+roles: admin | driver | inventory
+settings.ageVerificationDisabled: boolean
+disabled: boolean
+```
+
+Universal account routes:
+
+```text
+POST /v1/auth/login
+GET  /v1/auth/me
+```
+
+Driver signup/login still preserves the manual `driver_allowlist` gate, but it
+now ensures the Firebase user has an `accounts/{uid}` record with the `driver`
+role and returns a universal account session token. Driver workflow routes
+require a bearer token with the `driver` role.
+
+Admin routes for `bayblaze-admin`:
+
+```text
+GET   /v1/admin/accounts
+PATCH /v1/admin/accounts/:uid
+GET   /v1/admin/drivers/map
+GET   /v1/admin/drivers/routes
+POST  /v1/admin/isochrones
+GET   /v1/admin/orders
+GET   /v1/admin/orders/:orderId
+```
+
+`/v1/admin/*` routes require a BayBlaze account session bearer token with the
+`admin` role. The admin dashboard lives at `admin.bayblaze.net` and must call
+only `bayblaze-api`; it must not import Firebase, Firestore, Medusa, Google
+Maps, or service-token clients in browser code.
+
+Additional account/admin environment variables:
+
+```env
+ACCOUNT_SESSION_SECRET=<server-only signing secret>
+ACCOUNT_SESSION_TTL_SECONDS=1209600
+MEDUSA_ADMIN_ORDERS_PATH=/admin/orders
+```
 
 ## June 2026 Common API Bridge
 

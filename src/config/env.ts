@@ -12,6 +12,8 @@ const envSchema = z
     CORS_ORIGINS: z.string().optional().default(""),
 
     BAYBLAZE_API_SERVICE_TOKEN: z.string().optional(),
+    ACCOUNT_SESSION_SECRET: z.string().optional(),
+    ACCOUNT_SESSION_TTL_SECONDS: z.coerce.number().int().positive().optional().default(60 * 60 * 24 * 14),
     DRIVER_SESSION_SECRET: z.string().optional(),
     DRIVER_SESSION_TTL_SECONDS: z.coerce.number().int().positive().optional().default(60 * 60 * 24 * 14),
 
@@ -22,6 +24,7 @@ const envSchema = z
 
     MEDUSA_DRIVER_QUEUE_PATH: z.string().optional().default("/admin/bayblaze/driver-queues/{uid}"),
     MEDUSA_DELIVERY_ATTEMPT_PATH: z.string().optional().default("/admin/bayblaze/delivery-attempts"),
+    MEDUSA_ADMIN_ORDERS_PATH: z.string().optional().default("/admin/orders"),
 
     GOOGLE_MAPS_API_KEY: z.string().optional(),
 

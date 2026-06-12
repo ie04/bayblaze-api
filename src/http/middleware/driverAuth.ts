@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { getBayblazeAuth } from "../../clients/firebaseAdminClient";
+import { getAccount } from "../../modules/accounts/accountService";
 import { verifyDriverSessionToken } from "../../modules/drivers/driverSession";
 
 export type DriverAuthedRequest = Request & {
@@ -26,17 +27,33 @@ export async function requireDriverAuth(
   try {
     const session = verifyDriverSessionToken(token);
     if (session) {
+      const account = await getAccount(session.uid);
+
+      if (!account?.roles.includes("driver") || account.disabled) {
+        return res.status(403).json({
+          message: "Driver access is required.",
+        });
+      }
+
       req.driverAuth = {
         uid: session.uid,
-        email: session.email,
+        email: account.email || session.email,
       };
       return next();
     }
 
     const decoded = await getBayblazeAuth().verifyIdToken(token);
+    const account = await getAccount(decoded.uid);
+
+    if (!account?.roles.includes("driver")) {
+      return res.status(403).json({
+        message: "Driver access is required.",
+      });
+    }
+
     req.driverAuth = {
       uid: decoded.uid,
-      email: typeof decoded.email === "string" ? decoded.email : "",
+      email: account.email || (typeof decoded.email === "string" ? decoded.email : ""),
     };
 
     return next();

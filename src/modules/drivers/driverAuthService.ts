@@ -4,6 +4,7 @@ import { Resend } from "resend";
 
 import { getBayblazeAuth, getBayblazeFirestore } from "../../clients/firebaseAdminClient";
 import { env } from "../../config/env";
+import { ensureAccountRecord } from "../accounts/accountService";
 import { ApiRequestError } from "./driverWorkflowService";
 import { createDriverSessionToken } from "./driverSession";
 
@@ -158,10 +159,29 @@ export async function loginDriver(email: string, password: string) {
 }
 
 export function createSessionResponse(uid: string, email: string) {
+  return createDriverSessionResponse(uid, email);
+}
+
+async function createDriverSessionResponse(uid: string, email: string) {
+  const account = await ensureAccountRecord(uid, email, { roles: ["driver"] });
+
   return {
+    account: {
+      disabled: account.disabled,
+      displayName: account.displayName ?? "",
+      email: account.email,
+      roles: account.roles,
+      settings: account.settings,
+      uid: account.uid,
+    },
     session: {
       email,
-      token: createDriverSessionToken({ email, uid }),
+      token: createDriverSessionToken({
+        email: account.email,
+        roles: account.roles,
+        settings: account.settings,
+        uid,
+      }),
       uid,
     },
   };
