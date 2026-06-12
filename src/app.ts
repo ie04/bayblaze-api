@@ -9,6 +9,7 @@ import { createCheckoutBridgeRouter } from "./modules/checkout/checkoutBridgeRou
 import { createDriverBridgeRouter } from "./modules/drivers/driverBridgeRouter";
 import { createDriverWorkflowRouter } from "./modules/drivers/driverWorkflowRouter";
 import { createInventoryBridgeRouter } from "./modules/inventory/inventoryBridgeRouter";
+import { IsochronosRequestError } from "./modules/isochronos/googleMapsService";
 import { createOrderBridgeRouter } from "./modules/orders/orderBridgeRouter";
 
 export function createApp() {
@@ -66,6 +67,12 @@ export function createApp() {
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     console.error("Unhandled BayBlaze API error:", err);
+
+    if (err instanceof IsochronosRequestError) {
+      return res.status(err.status).json({
+        message: err.message,
+      });
+    }
 
     res.status(500).json({
       message: err instanceof Error ? err.message : "Unexpected API error.",

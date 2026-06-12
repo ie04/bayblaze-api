@@ -1,24 +1,30 @@
 import { Router } from "express";
+import { z } from "zod";
 
-import { forwardIsoChronosJson } from "../../clients/isochronosClient";
-import { env } from "../../config/env";
 import { requireApiServiceToken } from "../../http/middleware/apiServiceAuth";
-import { sendUpstreamJson } from "../../http/upstream";
+import { getOrderLiveTracking } from "../isochronos/orderLiveTrackingService";
+
+const coordinateSchema = z.object({
+  address: z.string().optional(),
+  lat: z.number(),
+  lng: z.number(),
+});
+
+const liveTrackingSchema = z.object({
+  customerAddress: z.string().optional(),
+  destination: coordinateSchema.optional(),
+  driverUid: z.string().optional(),
+  orderId: z.string().min(1),
+  orderReference: z.string().optional(),
+});
 
 export function createOrderBridgeRouter() {
   const router = Router();
 
   router.post("/orders/live-tracking", requireApiServiceToken, async (req, res, next) => {
     try {
-      const upstream = await forwardIsoChronosJson(
-        env.ISOCHRONOS_ORDER_TRACKING_PATH,
-        req.body,
-      );
-
-      await sendUpstreamJson(res, upstream, {
-        fallbackMessage: "IsoChronos order tracking API returned a non-JSON response.",
-        upstreamName: "IsoChronos order tracking",
-      });
+      const parsed = liveTrackingSchema.parse(req.body);
+      res.json(await getOrderLiveTracking(parsed));
     } catch (caught) {
       next(caught);
     }

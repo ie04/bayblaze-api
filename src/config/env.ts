@@ -20,13 +20,6 @@ const envSchema = z
     BAYBLAZE_INVENTORY_SERVICE_TOKEN: z.string().optional(),
     BAYBLAZE_DRIVER_SERVICE_TOKEN: z.string().optional(),
 
-    ISOCHRONOS_API_URL: z.string().optional(),
-    ISOCHRONOS_ADMIN_TOKEN: z.string().optional(),
-    ISOCHRONOS_PRECHECKOUT_ELIGIBILITY_PATH: z.string().optional().default("/routing/pre-checkout/eligibility"),
-    ISOCHRONOS_ORDER_TRACKING_PATH: z.string().optional().default("/orders/live-tracking"),
-    ISOCHRONOS_QUEUE_SCORE_PATH: z.string().optional().default("/driver-queues/score"),
-    ISOCHRONOS_DRIVER_LOCATION_PATH: z.string().optional().default("/driver-locations"),
-
     MEDUSA_DRIVER_QUEUE_PATH: z.string().optional().default("/admin/bayblaze/driver-queues/{uid}"),
     MEDUSA_DELIVERY_ATTEMPT_PATH: z.string().optional().default("/admin/bayblaze/delivery-attempts"),
 

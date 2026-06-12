@@ -1,23 +1,31 @@
 import { Router } from "express";
+import { z } from "zod";
 
-import { forwardIsoChronosJson } from "../../clients/isochronosClient";
-import { env } from "../../config/env";
 import { requireApiServiceToken } from "../../http/middleware/apiServiceAuth";
-import { sendUpstreamJson } from "../../http/upstream";
+import { evaluatePreCheckoutEligibility } from "../isochronos/checkoutEligibilityService";
+
+const preCheckoutEligibilitySchema = z.object({
+  checkoutId: z.string().optional(),
+  createdAt: z.string().optional(),
+  customerId: z.string().optional(),
+  destination: z.record(z.string(), z.any()).optional(),
+  items: z.array(z.record(z.string(), z.any())).min(1),
+  priority: z.enum(["LOW", "NORMAL", "HIGH"]).optional(),
+  promisedWindowMinutes: z.number().int().positive().optional(),
+  requestedDeliveryMode: z.enum(["NOW", "SCHEDULED"]).optional(),
+});
 
 export function createCheckoutBridgeRouter() {
   const router = Router();
 
   router.post("/checkout/eligibility", requireApiServiceToken, async (req, res, next) => {
     try {
-      const upstream = await forwardIsoChronosJson(
-        env.ISOCHRONOS_PRECHECKOUT_ELIGIBILITY_PATH,
-        req.body,
-      );
+      const parsed = preCheckoutEligibilitySchema.parse(req.body);
+      const eligibility = await evaluatePreCheckoutEligibility(parsed);
 
-      await sendUpstreamJson(res, upstream, {
-        fallbackMessage: "IsoChronos eligibility API returned a non-JSON response.",
-        upstreamName: "IsoChronos eligibility",
+      res.json({
+        evaluationType: "pre-checkout delivery eligibility evaluation",
+        ...eligibility,
       });
     } catch (caught) {
       next(caught);

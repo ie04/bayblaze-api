@@ -71,7 +71,7 @@ IsoChronos logic remains the source of truth for routing/tracking intelligence, 
 * route/geocode/cache state
 * tracking aggregation
 
-As IsoChronos is folded into `bayblaze-api`, preserve it as a clean internal module, not scattered utility code.
+Preserve IsoChronos-derived routing/tracking code as clean internal modules, not scattered utility code.
 
 ## Target architecture
 
@@ -121,9 +121,9 @@ behind `bayblaze-api`.
 * Firebase Authentication may remain the underlying password provider, but API
   routes own sign-in/signup, issue BayBlaze driver session tokens, and then
   read/write Firestore through Firebase Admin.
-* `bayblaze-isochronos` is being deconstructed into internal
-  `src/modules/isochronos/*` modules in `bayblaze-api`. Do not add new app-facing
-  dependencies on the standalone IsoChronos HTTP service.
+* `bayblaze-isochronos` functions used by storefront and driver workflows now
+  live as internal `src/modules/isochronos/*` modules in `bayblaze-api`. Do not
+  add new app-facing dependencies on the standalone IsoChronos HTTP service.
 * Use one Firebase project/database for driver workflow data and routing/cache
   data. The old `bayblaze-isochronos` primary Firestore plus separate
   `bayblaze-driver` secondary Firestore split is deprecated.
@@ -189,7 +189,7 @@ token aliases unless there is a concrete rotation plan.
 The current bridge pattern is:
 
 ```text
-frontend browser → app-owned server boundary → bayblaze-api → Medusa/IsoChronos
+frontend browser → app-owned server boundary → bayblaze-api → Medusa / Firebase / internal routing
 ```
 
 `bayblaze-inventory` must use this bridge strictly for inventory/product and
@@ -199,15 +199,12 @@ direct Medusa routes or hold Medusa service tokens. `bayblaze-api` forwards to:
 ```env
 MEDUSA_DRIVER_QUEUE_PATH=/admin/bayblaze/driver-queues/{uid}
 MEDUSA_DELIVERY_ATTEMPT_PATH=/admin/bayblaze/delivery-attempts
-ISOCHRONOS_PRECHECKOUT_ELIGIBILITY_PATH=/routing/pre-checkout/eligibility
-ISOCHRONOS_ORDER_TRACKING_PATH=/orders/live-tracking
-ISOCHRONOS_QUEUE_SCORE_PATH=/driver-queues/score
-ISOCHRONOS_DRIVER_LOCATION_PATH=/driver-locations
 ```
 
-`POST /v1/drivers/queues/score` and `POST /v1/drivers/location` now execute
-inside `bayblaze-api`; the old IsoChronos path variables remain documented only
-for routes not yet migrated.
+`POST /v1/checkout/eligibility`, `POST /v1/orders/live-tracking`,
+`POST /v1/drivers/queues/score`, and `POST /v1/drivers/location` now execute
+inside `bayblaze-api`; do not configure old IsoChronos path variables for these
+app-facing contracts.
 
 ## Module boundaries
 
@@ -300,15 +297,10 @@ router.post("/checkout/eligibility", async (req, res) => {
 
 ## IsoChronos migration rules
 
-`bayblaze-api` will eventually absorb IsoChronos as internal modules.
+`bayblaze-api` has absorbed the IsoChronos functions used by storefront and
+driver workflows as internal modules.
 
-Legacy migration pattern:
-
-```text
-apps → bayblaze-api → existing bayblaze-isochronos service
-```
-
-Current target:
+Current pattern:
 
 ```text
 apps → bayblaze-api → internal modules/isochronos/*
@@ -446,7 +438,7 @@ GET  /v1/orders/:reference/tracking
 GET  /v1/orders/:reference/summary
 ```
 
-Checkout eligibility must call internal IsoChronos routing logic or the temporary IsoChronos service.
+Checkout eligibility must call internal IsoChronos-derived routing logic.
 
 The storefront should receive customer-safe DTOs, not raw Medusa/Firebase/Google Maps documents.
 
