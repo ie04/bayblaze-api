@@ -108,6 +108,46 @@ The apps should not need to know internal service details such as:
 * upload storage paths
 * driver Firebase vs IsoChronos Firebase project split
 
+## June 2026 Unified Driver/IsoChronos Backend Direction
+
+The target backend shape is now a single Firestore-backed operational database
+behind `bayblaze-api`.
+
+* Driver browser code must call `bayblaze-api` for driver profiles, vehicles,
+  queues, clock state, delivery attempts, notification tokens, and live location
+  writes. It should not import Firestore collection names or write Firestore docs
+  directly.
+* Firebase Authentication may remain the driver sign-in provider, but API routes
+  should verify driver Firebase ID tokens server-side and then read/write
+  Firestore through Firebase Admin.
+* `bayblaze-isochronos` is being deconstructed into internal
+  `src/modules/isochronos/*` modules in `bayblaze-api`. Do not add new app-facing
+  dependencies on the standalone IsoChronos HTTP service.
+* Use one Firebase project/database for driver workflow data and routing/cache
+  data. The old `bayblaze-isochronos` primary Firestore plus separate
+  `bayblaze-driver` secondary Firestore split is deprecated.
+
+Current first merged API routes:
+
+```text
+GET    /v1/driver/me/profile
+PUT    /v1/driver/me/profile
+GET    /v1/driver/me/vehicles/available
+POST   /v1/driver/me/vehicles/link
+POST   /v1/driver/me/clock-in
+POST   /v1/driver/me/clock-out
+GET    /v1/driver/me/queue
+POST   /v1/driver/me/queue/sync
+POST   /v1/driver/me/location
+POST   /v1/driver/me/delivery-attempts
+POST   /v1/driver/me/notification-tokens
+DELETE /v1/driver/me/notification-tokens/:tokenId
+```
+
+These routes require a driver Firebase ID token, not
+`BAYBLAZE_API_SERVICE_TOKEN`. Existing trusted bridge routes under
+`/v1/drivers/*` still use the service token for server-to-server callers.
+
 ## June 2026 Common API Bridge
 
 `bayblaze-api` now exposes the first shared bridge routes for existing
@@ -152,6 +192,10 @@ ISOCHRONOS_ORDER_TRACKING_PATH=/orders/live-tracking
 ISOCHRONOS_QUEUE_SCORE_PATH=/driver-queues/score
 ISOCHRONOS_DRIVER_LOCATION_PATH=/driver-locations
 ```
+
+`POST /v1/drivers/queues/score` and `POST /v1/drivers/location` now execute
+inside `bayblaze-api`; the old IsoChronos path variables remain documented only
+for routes not yet migrated.
 
 ## Module boundaries
 
@@ -246,13 +290,13 @@ router.post("/checkout/eligibility", async (req, res) => {
 
 `bayblaze-api` will eventually absorb IsoChronos as internal modules.
 
-Short-term migration pattern:
+Legacy migration pattern:
 
 ```text
 apps → bayblaze-api → existing bayblaze-isochronos service
 ```
 
-Long-term target:
+Current target:
 
 ```text
 apps → bayblaze-api → internal modules/isochronos/*
@@ -266,41 +310,25 @@ When migrating from `bayblaze-isochronos`, preserve the existing service contrac
 * geocode/cache behavior
 * usage accounting behavior
 * coverage/isochrone semantics
-* driver Firebase read behavior
+* driver workflow read behavior through API-owned Firebase Admin services
 
 Do not expose Google Maps secrets or raw route-provider responses to frontend apps.
 
-## Firebase project split
+## Unified Firebase project
 
-Production must preserve the two-Firebase-project model.
+Production should converge on one Firebase project/database for operational
+driver state and routing/cache state, owned behind `bayblaze-api`.
 
-Primary IsoChronos Firebase project:
+Unified Firebase project:
 
 ```env
-FIREBASE_PROJECT_ID=bayblaze-isochronos
+FIREBASE_PROJECT_ID=bayblaze-driver
 FIRESTORE_DATABASE_ID=(default)
 FIREBASE_SERVICE_ACCOUNT_JSON_BASE64=...
+FIREBASE_STORAGE_BUCKET=bayblaze-driver.firebasestorage.app
 ```
 
-This owns IsoChronos/internal routing collections such as:
-
-```text
-geocode_cache
-api_usage_events
-coverage_isochrones
-autocomplete/session records
-routing/cache state
-```
-
-Secondary driver Firebase project:
-
-```env
-DRIVER_FIREBASE_PROJECT_ID=bayblaze-driver
-DRIVER_FIRESTORE_DATABASE_ID=(default)
-DRIVER_FIREBASE_SERVICE_ACCOUNT_JSON_BASE64=...
-```
-
-This owns driver/live collections such as:
+This owns driver/live and routing/cache collections such as:
 
 ```text
 driver_profiles
@@ -308,14 +336,18 @@ vehicles
 driver_delivery_queues
 driver_location_snapshots
 delivery_attempt_logs
+driver_notification_tokens
+geocode_cache
+api_usage_events
+coverage_isochrones
+autocomplete/session records
+routing/cache state
 ```
 
-Never repoint the primary IsoChronos Firebase config to `bayblaze-driver`.
-
-Use separate Firebase Admin app instances/clients for:
-
-* IsoChronos Firestore
-* driver Firestore
+The old `FIREBASE_PROJECT_ID=bayblaze-isochronos` plus
+`DRIVER_FIREBASE_PROJECT_ID=bayblaze-driver` split is deprecated. Existing
+deployment values may remain during rollout, but new code should use the unified
+Firebase Admin client in `src/clients/firebaseAdminClient.ts`.
 
 ## Medusa integration rules
 
@@ -408,18 +440,22 @@ The storefront should receive customer-safe DTOs, not raw Medusa/Firebase/Google
 
 ## Driver API scope
 
-The driver app may continue using Firebase directly for high-frequency realtime UI state when appropriate, such as:
-
-* queue listeners
-* live location snapshots
-* clocked-in state
-
-But durable business actions should go through `bayblaze-api`, such as:
+The driver app should not call Firestore directly. Driver UI state and durable
+business actions should go through `bayblaze-api`, such as:
 
 ```text
-POST /v1/drivers/location
-GET  /v1/drivers/me/queue
-POST /v1/delivery-attempts
+GET    /v1/driver/me/profile
+PUT    /v1/driver/me/profile
+GET    /v1/driver/me/vehicles/available
+POST   /v1/driver/me/vehicles/link
+POST   /v1/driver/me/clock-in
+POST   /v1/driver/me/clock-out
+GET    /v1/driver/me/queue
+POST   /v1/driver/me/queue/sync
+POST   /v1/driver/me/location
+POST   /v1/driver/me/delivery-attempts
+POST   /v1/driver/me/notification-tokens
+DELETE /v1/driver/me/notification-tokens/:tokenId
 POST /v1/messages/delivery
 POST /v1/orders/:reference/out-for-delivery
 POST /v1/orders/:reference/complete

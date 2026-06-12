@@ -32,7 +32,9 @@ const envSchema = z
 
     FIREBASE_PROJECT_ID: z.string().optional(),
     FIRESTORE_DATABASE_ID: z.string().optional(),
+    FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
     FIREBASE_SERVICE_ACCOUNT_JSON_BASE64: z.string().optional(),
+    FIREBASE_STORAGE_BUCKET: z.string().optional(),
 
     DRIVER_FIREBASE_PROJECT_ID: z.string().optional(),
     DRIVER_FIRESTORE_DATABASE_ID: z.string().optional(),

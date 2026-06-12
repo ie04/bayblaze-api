@@ -1,13 +1,14 @@
 import { Router } from "express";
 
-import { forwardIsoChronosJson } from "../../clients/isochronosClient";
 import {
   forwardDeliveryAttempt,
   forwardDriverQueueRequest,
 } from "../../clients/medusaDriverClient";
-import { env } from "../../config/env";
 import { requireApiServiceToken } from "../../http/middleware/apiServiceAuth";
 import { sendUpstreamJson } from "../../http/upstream";
+import { normalizeDriverQueuePayload } from "./driverQueueNormalizer";
+import { writeDriverLocationSnapshot } from "./driverWorkflowService";
+import { scoreDriverDeliveryQueue } from "../isochronos/driverQueueScoringService";
 
 export function createDriverBridgeRouter() {
   const router = Router();
@@ -36,12 +37,12 @@ export function createDriverBridgeRouter() {
 
   router.post("/drivers/queues/score", requireApiServiceToken, async (req, res, next) => {
     try {
-      const upstream = await forwardIsoChronosJson(env.ISOCHRONOS_QUEUE_SCORE_PATH, req.body);
+      const body = req.body as { uid?: unknown; queue?: unknown };
+      const uid = readString(body.uid);
+      const queue = normalizeDriverQueuePayload(uid, body.queue ?? {});
+      const scoredQueue = await scoreDriverDeliveryQueue(queue);
 
-      await sendUpstreamJson(res, upstream, {
-        fallbackMessage: "IsoChronos queue scoring API returned a non-JSON response.",
-        upstreamName: "IsoChronos queue scoring",
-      });
+      res.json({ queue: scoredQueue });
     } catch (caught) {
       next(caught);
     }
@@ -49,12 +50,33 @@ export function createDriverBridgeRouter() {
 
   router.post("/drivers/location", requireApiServiceToken, async (req, res, next) => {
     try {
-      const upstream = await forwardIsoChronosJson(env.ISOCHRONOS_DRIVER_LOCATION_PATH, req.body);
+      const body = req.body as {
+        uid?: unknown;
+        lat?: unknown;
+        lng?: unknown;
+        accuracy?: unknown;
+        heading?: unknown;
+        speed?: unknown;
+        clientCapturedAt?: unknown;
+      };
+      const uid = readString(body.uid);
 
-      await sendUpstreamJson(res, upstream, {
-        fallbackMessage: "IsoChronos driver location API returned a non-JSON response.",
-        upstreamName: "IsoChronos driver location",
+      if (!uid) {
+        return res.status(400).json({ message: "Driver UID is required." });
+      }
+
+      await writeDriverLocationSnapshot(uid, {
+        vehicleId: "",
+        lat: readNumber(body.lat),
+        lng: readNumber(body.lng),
+        accuracy: readNumber(body.accuracy),
+        heading: readNullableNumber(body.heading),
+        speed: readNullableNumber(body.speed),
+        clockedIn: true,
+        source: "driver-pwa",
+        clientCapturedAt: readNumber(body.clientCapturedAt, Date.now()),
       });
+      res.json({ ok: true });
     } catch (caught) {
       next(caught);
     }
@@ -90,4 +112,12 @@ function readString(value: unknown) {
   }
 
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readNumber(value: unknown, fallback?: number) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback ?? 0;
+}
+
+function readNullableNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }

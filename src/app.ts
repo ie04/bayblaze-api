@@ -7,6 +7,7 @@ import { env } from "./config/env";
 import { registerRoutes } from "./http/routes";
 import { createCheckoutBridgeRouter } from "./modules/checkout/checkoutBridgeRouter";
 import { createDriverBridgeRouter } from "./modules/drivers/driverBridgeRouter";
+import { createDriverWorkflowRouter } from "./modules/drivers/driverWorkflowRouter";
 import { createInventoryBridgeRouter } from "./modules/inventory/inventoryBridgeRouter";
 import { createOrderBridgeRouter } from "./modules/orders/orderBridgeRouter";
 
@@ -55,6 +56,7 @@ export function createApp() {
   app.use("/v1", createCheckoutBridgeRouter());
   app.use("/v1", createOrderBridgeRouter());
   app.use("/v1", createDriverBridgeRouter());
+  app.use("/v1", createDriverWorkflowRouter());
 
   app.use((_req, res) => {
     res.status(404).json({
