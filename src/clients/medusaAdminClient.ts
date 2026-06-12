@@ -12,12 +12,12 @@ function getMedusaBackendUrl() {
 
 function getMedusaAdminToken() {
   const value =
-    env.MEDUSA_ADMIN_API_TOKEN ||
+    env.BAYBLAZE_INVENTORY_SERVICE_TOKEN ||
     env.BAYBLAZE_DRIVER_SERVICE_TOKEN ||
-    env.BAYBLAZE_INVENTORY_SERVICE_TOKEN;
+    env.MEDUSA_ADMIN_API_TOKEN;
 
   if (!value) {
-    throw new Error("MEDUSA_ADMIN_API_TOKEN is not configured.");
+    throw new Error("BayBlaze Medusa service token is not configured.");
   }
 
   return value;
