@@ -207,7 +207,7 @@ Additional account/admin environment variables:
 ```env
 ACCOUNT_SESSION_SECRET=<server-only signing secret>
 ACCOUNT_SESSION_TTL_SECONDS=1209600
-MEDUSA_ADMIN_ORDERS_PATH=/admin/orders
+MEDUSA_ADMIN_ORDERS_PATH=/admin/bayblaze/orders
 ```
 
 ## June 2026 Common API Bridge

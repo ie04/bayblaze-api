@@ -24,7 +24,7 @@ const envSchema = z
 
     MEDUSA_DRIVER_QUEUE_PATH: z.string().optional().default("/admin/bayblaze/driver-queues/{uid}"),
     MEDUSA_DELIVERY_ATTEMPT_PATH: z.string().optional().default("/admin/bayblaze/delivery-attempts"),
-    MEDUSA_ADMIN_ORDERS_PATH: z.string().optional().default("/admin/orders"),
+    MEDUSA_ADMIN_ORDERS_PATH: z.string().optional().default("/admin/bayblaze/orders"),
 
     GOOGLE_MAPS_API_KEY: z.string().optional(),
 
