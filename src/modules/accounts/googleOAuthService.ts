@@ -97,7 +97,9 @@ export async function completeGoogleOAuth(input: {
   const displayName = googleProfile.name || authUser.displayName || "";
   const existingAccount = await getAccount(authUser.uid);
   const account = await ensureAccountRecord(authUser.uid, email, {
-    badges: existingAccount?.badges ?? ["customer"],
+    badges: state.commerce === "storefront"
+      ? [...(existingAccount?.badges ?? []), "customer"]
+      : existingAccount?.badges ?? ["customer"],
     displayName,
   });
   const medusaSession = state.commerce === "storefront" && account.badges.includes("customer")

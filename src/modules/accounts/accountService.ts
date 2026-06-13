@@ -23,7 +23,11 @@ export async function loginCustomerAccount(email: string, password: string) {
   const response = await loginExistingAccount(parseEmail(email), password);
 
   if (!response.account.badges.includes("customer")) {
-    throw new ApiRequestError(403, "This BayBlaze account is not enabled for storefront access.");
+    const account = await ensureAccountRecord(response.account.uid, response.account.email, {
+      badges: ["customer"],
+    });
+
+    return createSessionResponse(account);
   }
 
   return response;
