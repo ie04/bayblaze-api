@@ -26,8 +26,12 @@ const envSchema = z
     MEDUSA_DRIVER_QUEUE_PATH: z.string().optional().default("/admin/bayblaze/driver-queues/{uid}"),
     MEDUSA_DELIVERY_ATTEMPT_PATH: z.string().optional().default("/admin/bayblaze/delivery-attempts"),
     MEDUSA_ADMIN_ORDERS_PATH: z.string().optional().default("/admin/bayblaze/orders"),
+    MEDUSA_CUSTOMER_SESSION_PATH: z.string().optional().default("/admin/bayblaze/customer-sessions"),
 
     GOOGLE_MAPS_API_KEY: z.string().optional(),
+    GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+    GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+    GOOGLE_OAUTH_REDIRECT_URL: z.string().optional(),
 
     FIREBASE_PROJECT_ID: z.string().optional(),
     FIRESTORE_DATABASE_ID: z.string().optional(),

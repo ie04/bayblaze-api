@@ -233,11 +233,21 @@ Customer storefront account routes:
 ```text
 POST /v1/customer/auth/accounts
 POST /v1/customer/auth/login
+POST /v1/customer/auth/google/start
+POST /v1/customer/auth/google/callback
 ```
 
 The storefront uses these routes for BayBlaze identity and keeps the Medusa
 customer token only for commerce reads such as saved customer details and order
 history.
+
+Google OAuth must be centralized through `bayblaze-api`: the API signs OAuth
+state, exchanges Google authorization codes, verifies the Google ID token,
+creates or finds the Firebase Auth user, ensures a `customer` badge account
+record, then calls embedded Medusa's service-only
+`/admin/bayblaze/customer-sessions` route to create or retrieve the matching
+Medusa customer session. Do not use Medusa OAuth as the primary identity
+authority from the storefront.
 
 Driver signup/login still preserves the manual `driver_allowlist` gate, but it
 now ensures the Firebase user has an `accounts/{uid}` record with the
@@ -269,6 +279,10 @@ Additional account/admin environment variables:
 ACCOUNT_SESSION_SECRET=<server-only signing secret>
 ACCOUNT_SESSION_TTL_SECONDS=1209600
 MEDUSA_ADMIN_ORDERS_PATH=/admin/bayblaze/orders
+MEDUSA_CUSTOMER_SESSION_PATH=/admin/bayblaze/customer-sessions
+GOOGLE_OAUTH_CLIENT_ID=<google oauth client id>
+GOOGLE_OAUTH_CLIENT_SECRET=<google oauth client secret>
+GOOGLE_OAUTH_REDIRECT_URL=https://bayblaze.net/api/auth/oauth/google/callback
 ```
 
 ## June 2026 Common API Bridge

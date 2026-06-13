@@ -10,6 +10,10 @@ import {
   loginCustomerAccount,
   sanitizeAccount,
 } from "./accountService";
+import {
+  completeGoogleOAuth,
+  createGoogleOAuthStart,
+} from "./googleOAuthService";
 
 const loginSchema = z.object({
   email: z.string().min(1),
@@ -22,6 +26,17 @@ const customerCreateSchema = z.object({
   firstName: z.string().optional(),
   lastName: z.string().optional(),
   password: z.string().min(1),
+});
+
+const googleOAuthStartSchema = z.object({
+  callbackUrl: z.string().min(1),
+  redirectTo: z.string().optional(),
+});
+
+const googleOAuthCallbackSchema = z.object({
+  callbackUrl: z.string().min(1),
+  code: z.string().min(1),
+  state: z.string().min(1),
 });
 
 export function createAccountRouter() {
@@ -49,6 +64,24 @@ export function createAccountRouter() {
     try {
       const parsed = customerCreateSchema.parse(req.body);
       res.json(await createCustomerAccount(parsed));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/customer/auth/google/start", async (req, res, next) => {
+    try {
+      const parsed = googleOAuthStartSchema.parse(req.body);
+      res.json(createGoogleOAuthStart(parsed));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/customer/auth/google/callback", async (req, res, next) => {
+    try {
+      const parsed = googleOAuthCallbackSchema.parse(req.body);
+      res.json(await completeGoogleOAuth(parsed));
     } catch (caught) {
       next(caught);
     }

@@ -122,6 +122,13 @@ partitioning, and Google Maps usage guardrails.
   `MEDUSA_ADMIN_ORDERS_PATH=/admin/bayblaze/orders`; do not point it at native
   `/admin/orders` unless the API is changed to use a real Medusa admin auth
   flow.
+- BayBlaze customer Google OAuth is owned by `bayblaze-api`, not Medusa's
+  native OAuth routes. After `bayblaze-api` verifies Google and creates/finds
+  the BayBlaze account, it calls Medusa service route
+  `/admin/bayblaze/customer-sessions` with the shared service token. That route
+  finds or creates the Medusa customer account, links a `bayblaze_google` auth
+  identity, and returns a Store API-compatible customer bearer token for the
+  storefront `bayblaze_customer_token` cookie.
 - `/admin/bayblaze/delivery-attempts` accepts driver lifecycle events
   `out_for_delivery`, `completed`, and `cancelled`. `out_for_delivery` is
   non-terminal and should update order metadata with
