@@ -3,10 +3,24 @@ import { z } from "zod";
 
 import { requireAccountAuth, type AccountAuthedRequest } from "../../http/middleware/accountAuth";
 import { ApiRequestError } from "../drivers/driverWorkflowService";
-import { getAccount, loginAccount, sanitizeAccount } from "./accountService";
+import {
+  createCustomerAccount,
+  getAccount,
+  loginAccount,
+  loginCustomerAccount,
+  sanitizeAccount,
+} from "./accountService";
 
 const loginSchema = z.object({
   email: z.string().min(1),
+  password: z.string().min(1),
+});
+
+const customerCreateSchema = z.object({
+  displayName: z.string().optional(),
+  email: z.string().min(1),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
   password: z.string().min(1),
 });
 
@@ -17,6 +31,24 @@ export function createAccountRouter() {
     try {
       const parsed = loginSchema.parse(req.body);
       res.json(await loginAccount(parsed.email, parsed.password));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/customer/auth/login", async (req, res, next) => {
+    try {
+      const parsed = loginSchema.parse(req.body);
+      res.json(await loginCustomerAccount(parsed.email, parsed.password));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/customer/auth/accounts", async (req, res, next) => {
+    try {
+      const parsed = customerCreateSchema.parse(req.body);
+      res.json(await createCustomerAccount(parsed));
     } catch (caught) {
       next(caught);
     }

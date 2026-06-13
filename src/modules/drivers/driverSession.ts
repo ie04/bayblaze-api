@@ -7,12 +7,14 @@ type DriverSessionPayload = {
 };
 
 export function createDriverSessionToken(input: {
+  badges?: Array<"customer" | "employee">;
   email: string;
   roles?: Array<"admin" | "driver" | "inventory">;
   settings?: { ageVerificationDisabled: boolean };
   uid: string;
 }) {
   return createAccountSessionToken({
+    badges: input.badges ?? ["employee"],
     email: input.email,
     roles: input.roles ?? ["driver"],
     settings: input.settings ?? { ageVerificationDisabled: false },

@@ -2,7 +2,7 @@ import { getBayblazeFirestore } from "../../clients/firebaseAdminClient";
 import { forwardAdminOrderDetailRequest, forwardAdminOrdersRequest } from "../../clients/medusaAdminClient";
 import { sendUpstreamJson } from "../../http/upstream";
 import { searchAccounts, updateAccountAccess } from "../accounts/accountService";
-import type { AccountRole } from "../accounts/accountTypes";
+import type { AccountBadge, AccountRole } from "../accounts/accountTypes";
 import type { DriverDeliveryQueue, DriverLocationSnapshot, DriverProfile, VehicleRecord } from "../drivers/driverWorkflowTypes";
 import { ApiRequestError } from "../drivers/driverWorkflowService";
 import { geocodeAddress, type LatLng } from "../isochronos/googleMapsService";
@@ -19,6 +19,7 @@ export async function updateAdminAccount(
   input: {
     disabled?: boolean;
     displayName?: string;
+    badges?: AccountBadge[];
     roles?: AccountRole[];
     settings?: { ageVerificationDisabled?: boolean };
   },

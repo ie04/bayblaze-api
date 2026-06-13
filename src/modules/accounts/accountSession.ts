@@ -4,6 +4,7 @@ import { env } from "../../config/env";
 import type { AccountSessionPayload } from "./accountTypes";
 
 export function createAccountSessionToken(input: {
+  badges: AccountSessionPayload["badges"];
   email: string;
   roles: AccountSessionPayload["roles"];
   settings: AccountSessionPayload["settings"];
@@ -12,6 +13,7 @@ export function createAccountSessionToken(input: {
   const payload: AccountSessionPayload = {
     email: input.email,
     exp: Math.floor(Date.now() / 1000) + env.ACCOUNT_SESSION_TTL_SECONDS,
+    badges: input.badges,
     roles: input.roles,
     settings: input.settings,
     uid: input.uid,
@@ -39,6 +41,7 @@ export function verifyAccountSessionToken(token: string) {
     return {
       ...payload,
       roles: Array.isArray(payload.roles) ? payload.roles : [],
+      badges: Array.isArray(payload.badges) ? payload.badges : [],
       settings: {
         ageVerificationDisabled: payload.settings?.ageVerificationDisabled === true,
       },

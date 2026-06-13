@@ -209,10 +209,17 @@ roles. Firebase Auth remains the password provider, but account authorization is
 represented by API-owned Firestore records in `accounts/{uid}`:
 
 ```text
+badges: customer | employee
 roles: admin | driver | inventory
 settings.ageVerificationDisabled: boolean
 disabled: boolean
 ```
+
+Every account should carry exactly the user-facing access badge intended for
+that identity: `customer` for storefront shoppers or `employee` for BayBlaze
+staff. Employee accounts can then receive any combination of `driver`,
+`inventory`, and `admin` roles. Role-protected API middleware requires both the
+`employee` badge and the requested role.
 
 Universal account routes:
 
@@ -221,10 +228,22 @@ POST /v1/auth/login
 GET  /v1/auth/me
 ```
 
+Customer storefront account routes:
+
+```text
+POST /v1/customer/auth/accounts
+POST /v1/customer/auth/login
+```
+
+The storefront uses these routes for BayBlaze identity and keeps the Medusa
+customer token only for commerce reads such as saved customer details and order
+history.
+
 Driver signup/login still preserves the manual `driver_allowlist` gate, but it
-now ensures the Firebase user has an `accounts/{uid}` record with the `driver`
-role and returns a universal account session token. Driver workflow routes
-require a bearer token with the `driver` role.
+now ensures the Firebase user has an `accounts/{uid}` record with the
+`employee` badge and `driver` role, then returns a universal account session
+token. Driver workflow routes require a bearer token from an employee account
+with the `driver` role.
 
 Admin routes for `bayblaze-admin`:
 
@@ -238,10 +257,11 @@ GET   /v1/admin/orders
 GET   /v1/admin/orders/:orderId
 ```
 
-`/v1/admin/*` routes require a BayBlaze account session bearer token with the
-`admin` role. The admin dashboard lives at `admin.bayblaze.net` and must call
-only `bayblaze-api`; it must not import Firebase, Firestore, Medusa, Google
-Maps, or service-token clients in browser code.
+`/v1/admin/*` routes require a BayBlaze account session bearer token from an
+employee account with the `admin` role. The admin dashboard lives at
+`admin.bayblaze.net` and must call only `bayblaze-api`; it must not import
+Firebase, Firestore, Medusa, Google Maps, or service-token clients in browser
+code.
 
 Additional account/admin environment variables:
 

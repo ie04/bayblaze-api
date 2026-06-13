@@ -177,6 +177,7 @@ async function createDriverSessionResponse(uid: string, email: string) {
     session: {
       email,
       token: createDriverSessionToken({
+        badges: account.badges,
         email: account.email,
         roles: account.roles,
         settings: account.settings,
