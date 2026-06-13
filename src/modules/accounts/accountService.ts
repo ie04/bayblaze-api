@@ -1,6 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 
 import { getBayblazeAuth, getBayblazeFirestore } from "../../clients/firebaseAdminClient";
+import { createMedusaCustomerSession } from "../../clients/medusaCustomerSessionClient";
 import { env } from "../../config/env";
 import { ApiRequestError } from "../drivers/driverWorkflowService";
 import { createAccountSessionToken } from "./accountSession";
@@ -38,6 +39,7 @@ export async function createCustomerAccount(input: {
   email: string;
   firstName?: string;
   lastName?: string;
+  metadata?: Record<string, unknown>;
   password: string;
 }) {
   const email = parseEmail(input.email);
@@ -60,8 +62,20 @@ export async function createCustomerAccount(input: {
     badges: ["customer"],
     displayName,
   });
+  const medusaSession = await createMedusaCustomerSession({
+    email,
+    firstName: input.firstName,
+    lastName: input.lastName,
+    metadata: input.metadata,
+  });
 
-  return createSessionResponse(account);
+  return {
+    ...createSessionResponse(account),
+    commerce: {
+      customer: medusaSession.customer,
+      customerToken: medusaSession.token,
+    },
+  };
 }
 
 async function loginExistingAccount(normalizedEmail: string, password: string) {

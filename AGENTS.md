@@ -244,6 +244,10 @@ Storefront sign-in is self-service customer access: when a valid existing
 BayBlaze account signs into the storefront by email/password or Google OAuth,
 the API should ensure the `customer` badge automatically instead of requiring an
 admin to grant storefront access.
+Storefront customer account creation should also create the Medusa commerce
+session through the API-owned embedded Medusa `/admin/bayblaze/customer-sessions`
+bridge and return `commerce.customerToken`; the storefront should not call
+native Medusa email/password registration directly.
 
 Google OAuth must be centralized through `bayblaze-api`: the API signs OAuth
 state, exchanges Google authorization codes, verifies the Google ID token,

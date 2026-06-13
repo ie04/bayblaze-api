@@ -25,6 +25,7 @@ const customerCreateSchema = z.object({
   email: z.string().min(1),
   firstName: z.string().optional(),
   lastName: z.string().optional(),
+  metadata: z.record(z.unknown()).optional(),
   password: z.string().min(1),
 });
 

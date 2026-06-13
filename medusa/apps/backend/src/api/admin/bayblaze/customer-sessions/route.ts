@@ -56,6 +56,7 @@ type CustomerSessionBody = {
   first_name?: unknown;
   google_subject?: unknown;
   last_name?: unknown;
+  metadata?: unknown;
 };
 
 const tokenTtl = "30d";
@@ -69,6 +70,7 @@ export async function POST(req: MedusaRequest<CustomerSessionBody>, res: MedusaR
   const googleSubject = readString(req.body?.google_subject) || email;
   const firstName = readString(req.body?.first_name) || "BayBlaze";
   const lastName = readString(req.body?.last_name) || "Customer";
+  const metadata = readMetadata(req.body?.metadata);
   const authIdentity = await ensureAuthIdentity(req, {
     email,
     firstName,
@@ -80,6 +82,7 @@ export async function POST(req: MedusaRequest<CustomerSessionBody>, res: MedusaR
     email,
     firstName,
     lastName,
+    metadata,
   });
   const token = createCustomerToken(req, {
     authIdentity,
@@ -145,6 +148,7 @@ async function ensureCustomer(
     email: string;
     firstName: string;
     lastName: string;
+    metadata?: Record<string, unknown>;
   },
 ) {
   const existing = await findCustomerByEmail(req, input.email);
@@ -168,6 +172,7 @@ async function ensureCustomer(
         email: input.email,
         first_name: input.firstName,
         last_name: input.lastName,
+        metadata: input.metadata,
       },
     },
   });
@@ -237,4 +242,10 @@ function readEmail(value: unknown) {
 
 function readString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readMetadata(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
 }

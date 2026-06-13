@@ -17,6 +17,7 @@ export async function createMedusaCustomerSession(input: {
   firstName?: string;
   googleSubject?: string;
   lastName?: string;
+  metadata?: Record<string, unknown>;
 }) {
   const response = await fetch(
     new URL(env.MEDUSA_CUSTOMER_SESSION_PATH, getMedusaBackendUrl()),
@@ -26,6 +27,7 @@ export async function createMedusaCustomerSession(input: {
         first_name: input.firstName,
         google_subject: input.googleSubject,
         last_name: input.lastName,
+        metadata: input.metadata,
       }),
       headers: createBayblazeMedusaHeaders({
         acceptJson: true,
