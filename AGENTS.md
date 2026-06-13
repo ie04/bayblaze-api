@@ -284,7 +284,7 @@ MEDUSA_ADMIN_ORDERS_PATH=/admin/bayblaze/orders
 MEDUSA_CUSTOMER_SESSION_PATH=/admin/bayblaze/customer-sessions
 GOOGLE_OAUTH_CLIENT_ID=<google oauth client id>
 GOOGLE_OAUTH_CLIENT_SECRET=<google oauth client secret>
-GOOGLE_OAUTH_REDIRECT_URL=https://bayblaze.net/api/auth/oauth/google/callback
+GOOGLE_OAUTH_REDIRECT_URL=https://bayblaze.net/api/auth/oauth/google/callback,https://driver.bayblaze.net/auth/google/callback,https://inventory.bayblaze.net/auth/google/callback
 ```
 
 ## June 2026 Common API Bridge

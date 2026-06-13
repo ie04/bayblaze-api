@@ -279,7 +279,13 @@ function assertAllowedCallbackUrl(callbackUrl: string) {
     return;
   }
 
-  if (callbackUrl !== new URL(env.GOOGLE_OAUTH_REDIRECT_URL).toString()) {
+  const allowedUrls = env.GOOGLE_OAUTH_REDIRECT_URL
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => new URL(value).toString());
+
+  if (!allowedUrls.includes(callbackUrl)) {
     throw new ApiRequestError(400, "Google OAuth callback URL is not allowed.");
   }
 }
