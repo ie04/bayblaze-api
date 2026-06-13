@@ -102,14 +102,25 @@ export async function completeGoogleOAuth(input: {
       : existingAccount?.badges ?? ["customer"],
     displayName,
   });
-  const medusaSession = state.commerce === "storefront" && account.badges.includes("customer")
-    ? await createMedusaCustomerSession({
-        email,
-        firstName: googleProfile.given_name,
-        googleSubject: googleProfile.sub,
-        lastName: googleProfile.family_name,
-      })
-    : null;
+  const medusaSession =
+    state.commerce === "storefront" && account.badges.includes("customer")
+      ? await createMedusaCustomerSession({
+          email,
+          firstName: googleProfile.given_name,
+          googleSubject: googleProfile.sub,
+          lastName: googleProfile.family_name,
+        }).catch((caught) => {
+          console.error(
+            "Google OAuth completed, but Medusa customer-session creation failed:",
+            caught,
+          );
+
+          throw new ApiRequestError(
+            502,
+            "Google sign-in succeeded, but the storefront customer session could not be created.",
+          );
+        })
+      : null;
 
   return {
     ...createSessionResponse(account),

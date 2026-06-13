@@ -25,9 +25,6 @@ services:
     env_file:
       - ./medusa/.env.production
     environment:
-      BAYBLAZE_MEDUSA_SERVICE_TOKEN: ${BAYBLAZE_MEDUSA_SERVICE_TOKEN:-}
-      BAYBLAZE_DRIVER_SERVICE_TOKEN: ${BAYBLAZE_DRIVER_SERVICE_TOKEN:-}
-      BAYBLAZE_INVENTORY_SERVICE_TOKEN: ${BAYBLAZE_INVENTORY_SERVICE_TOKEN:-}
       BAYBLAZE_INVENTORY_IMAGE_UPLOAD_DIR: ${BAYBLAZE_INVENTORY_IMAGE_UPLOAD_DIR:-/app/uploads/bayblaze-inventory}
     depends_on:
       postgres:

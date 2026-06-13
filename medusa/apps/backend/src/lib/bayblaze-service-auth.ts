@@ -5,21 +5,25 @@ export function assertBayblazeServiceToken(
   res: MedusaResponse,
 ) {
   const expectedToken =
-    process.env.BAYBLAZE_MEDUSA_SERVICE_TOKEN ||
-    process.env.BAYBLAZE_INVENTORY_SERVICE_TOKEN ||
-    process.env.BAYBLAZE_DRIVER_SERVICE_TOKEN ||
-    process.env.MEDUSA_ADMIN_API_TOKEN;
-  const providedToken =
+    process.env.BAYBLAZE_MEDUSA_SERVICE_TOKEN?.trim();
+  const providedToken = (
     req.get("x-bayblaze-service-token") ||
-    req.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
+    req.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1] ||
+    ""
+  ).trim();
 
   if (!expectedToken) {
-    res.status(503).json({ message: "BayBlaze service token is not configured." });
+    res.status(503).json({
+      message:
+        "BAYBLAZE_MEDUSA_SERVICE_TOKEN is not configured on Medusa.",
+    });
     return false;
   }
 
   if (!providedToken || providedToken !== expectedToken) {
-    res.status(401).json({ message: "Unauthorized" });
+    res.status(401).json({
+      message: "BayBlaze API-to-Medusa service authentication failed.",
+    });
     return false;
   }
 

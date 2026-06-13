@@ -11,14 +11,12 @@ export function getMedusaBackendUrl() {
 }
 
 export function getBayblazeMedusaServiceToken() {
-  const value =
-    env.BAYBLAZE_MEDUSA_SERVICE_TOKEN ||
-    env.BAYBLAZE_INVENTORY_SERVICE_TOKEN ||
-    env.BAYBLAZE_DRIVER_SERVICE_TOKEN ||
-    env.MEDUSA_ADMIN_API_TOKEN;
+  const value = env.BAYBLAZE_MEDUSA_SERVICE_TOKEN?.trim();
 
   if (!value) {
-    throw new Error("BAYBLAZE_MEDUSA_SERVICE_TOKEN is not configured.");
+    throw new Error(
+      "BAYBLAZE_MEDUSA_SERVICE_TOKEN is not configured on bayblaze-api.",
+    );
   }
 
   return value;
