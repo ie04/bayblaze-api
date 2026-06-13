@@ -13,6 +13,7 @@ import {
 
 type GoogleOAuthState = {
   callbackUrl: string;
+  commerce?: "storefront";
   exp: number;
   nonce: string;
   redirectTo?: string;
@@ -44,6 +45,7 @@ const stateTtlSeconds = 10 * 60;
 
 export function createGoogleOAuthStart(input: {
   callbackUrl: string;
+  commerce?: "storefront";
   redirectTo?: string;
 }) {
   const { clientId } = getGoogleOAuthConfig();
@@ -52,6 +54,7 @@ export function createGoogleOAuthStart(input: {
   const redirectTo = parseRedirectTo(input.redirectTo);
   const state = signState({
     callbackUrl,
+    commerce: input.commerce,
     exp: Math.floor(Date.now() / 1000) + stateTtlSeconds,
     nonce: randomBytes(16).toString("base64url"),
     redirectTo,
@@ -91,30 +94,31 @@ export async function completeGoogleOAuth(input: {
     displayName: googleProfile.name,
     email,
   });
-  const existingAccount = await getAccount(authUser.uid);
-
-  if (existingAccount && !existingAccount.badges.includes("customer")) {
-    throw new ApiRequestError(403, "This BayBlaze account is not enabled for storefront access.");
-  }
-
   const displayName = googleProfile.name || authUser.displayName || "";
+  const existingAccount = await getAccount(authUser.uid);
   const account = await ensureAccountRecord(authUser.uid, email, {
-    badges: ["customer"],
+    badges: existingAccount?.badges ?? ["customer"],
     displayName,
   });
-  const medusaSession = await createMedusaCustomerSession({
-    email,
-    firstName: googleProfile.given_name,
-    googleSubject: googleProfile.sub,
-    lastName: googleProfile.family_name,
-  });
+  const medusaSession = state.commerce === "storefront" && account.badges.includes("customer")
+    ? await createMedusaCustomerSession({
+        email,
+        firstName: googleProfile.given_name,
+        googleSubject: googleProfile.sub,
+        lastName: googleProfile.family_name,
+      })
+    : null;
 
   return {
     ...createSessionResponse(account),
-    commerce: {
-      customer: medusaSession.customer,
-      customerToken: medusaSession.token,
-    },
+    ...(medusaSession
+      ? {
+          commerce: {
+            customer: medusaSession.customer,
+            customerToken: medusaSession.token,
+          },
+        }
+      : {}),
     redirectTo: state.redirectTo ?? "/account",
   };
 }

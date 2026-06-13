@@ -30,6 +30,7 @@ const customerCreateSchema = z.object({
 
 const googleOAuthStartSchema = z.object({
   callbackUrl: z.string().min(1),
+  commerce: z.enum(["storefront"]).optional(),
   redirectTo: z.string().optional(),
 });
 
@@ -69,7 +70,7 @@ export function createAccountRouter() {
     }
   });
 
-  router.post("/customer/auth/google/start", async (req, res, next) => {
+  router.post("/auth/google/start", async (req, res, next) => {
     try {
       const parsed = googleOAuthStartSchema.parse(req.body);
       res.json(createGoogleOAuthStart(parsed));
@@ -78,7 +79,7 @@ export function createAccountRouter() {
     }
   });
 
-  router.post("/customer/auth/google/callback", async (req, res, next) => {
+  router.post("/auth/google/callback", async (req, res, next) => {
     try {
       const parsed = googleOAuthCallbackSchema.parse(req.body);
       res.json(await completeGoogleOAuth(parsed));

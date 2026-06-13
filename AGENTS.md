@@ -225,6 +225,8 @@ Universal account routes:
 
 ```text
 POST /v1/auth/login
+POST /v1/auth/google/start
+POST /v1/auth/google/callback
 GET  /v1/auth/me
 ```
 
@@ -233,8 +235,6 @@ Customer storefront account routes:
 ```text
 POST /v1/customer/auth/accounts
 POST /v1/customer/auth/login
-POST /v1/customer/auth/google/start
-POST /v1/customer/auth/google/callback
 ```
 
 The storefront uses these routes for BayBlaze identity and keeps the Medusa
@@ -243,11 +243,13 @@ history.
 
 Google OAuth must be centralized through `bayblaze-api`: the API signs OAuth
 state, exchanges Google authorization codes, verifies the Google ID token,
-creates or finds the Firebase Auth user, ensures a `customer` badge account
-record, then calls embedded Medusa's service-only
-`/admin/bayblaze/customer-sessions` route to create or retrieve the matching
-Medusa customer session. Do not use Medusa OAuth as the primary identity
-authority from the storefront.
+creates or finds the Firebase Auth user, ensures an account record, and returns
+a universal BayBlaze account session. Apps then enforce their required
+badge/role. Storefront OAuth passes `commerce: "storefront"` to the universal
+start route; when the resulting account has the `customer` badge, the API also
+calls embedded Medusa's service-only `/admin/bayblaze/customer-sessions` route
+to create or retrieve the matching Medusa customer session. Do not use Medusa
+OAuth as the primary identity authority from the storefront.
 
 Driver signup/login still preserves the manual `driver_allowlist` gate, but it
 now ensures the Firebase user has an `accounts/{uid}` record with the
