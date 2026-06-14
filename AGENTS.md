@@ -472,10 +472,10 @@ driver state and routing/cache state, owned behind `bayblaze-api`.
 Unified Firebase project:
 
 ```env
-FIREBASE_PROJECT_ID=bayblaze-driver
+FIREBASE_PROJECT_ID=bayblaze-isochronos
 FIRESTORE_DATABASE_ID=(default)
 FIREBASE_SERVICE_ACCOUNT_JSON_BASE64=...
-FIREBASE_STORAGE_BUCKET=bayblaze-driver.firebasestorage.app
+FIREBASE_STORAGE_BUCKET=bayblaze-isochronos.firebasestorage.app
 ```
 
 This owns driver/live and routing/cache collections such as:
@@ -494,10 +494,12 @@ autocomplete/session records
 routing/cache state
 ```
 
-The old `FIREBASE_PROJECT_ID=bayblaze-isochronos` plus
-`DRIVER_FIREBASE_PROJECT_ID=bayblaze-driver` split is deprecated. Existing
-deployment values may remain during rollout, but new code should use the unified
-Firebase Admin client in `src/clients/firebaseAdminClient.ts`.
+The old split of separate primary and driver Firebase projects is deprecated.
+New code should use the unified Firebase Admin client in
+`src/clients/firebaseAdminClient.ts`. The production Storage bucket
+`gs://bayblaze-isochronos.firebasestorage.app` must exist before driver profile
+or delivery-attempt photo uploads can succeed; missing buckets surface to the
+driver PWA as "The specified bucket does not exist."
 
 ## Medusa integration rules
 
@@ -841,10 +843,7 @@ MEDUSA_ADMIN_ORDERS_PATH=/admin/bayblaze/orders
 FIREBASE_PROJECT_ID=bayblaze-isochronos
 FIRESTORE_DATABASE_ID=(default)
 FIREBASE_SERVICE_ACCOUNT_JSON_BASE64=...
-
-DRIVER_FIREBASE_PROJECT_ID=bayblaze-driver
-DRIVER_FIRESTORE_DATABASE_ID=(default)
-DRIVER_FIREBASE_SERVICE_ACCOUNT_JSON_BASE64=...
+FIREBASE_STORAGE_BUCKET=bayblaze-isochronos.firebasestorage.app
 
 GOOGLE_MAPS_API_KEY=...
 
