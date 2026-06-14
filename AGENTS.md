@@ -283,6 +283,12 @@ employee account with the `admin` role. The admin dashboard lives at
 Firebase, Firestore, Medusa, Google Maps, or service-token clients in browser
 code.
 
+`POST /v1/admin/isochrones` samples Google Routes round-trip duration from WH1
+or the requested origin across radial bearings and stores short-lived
+`coverage_isochrones` cache documents. It should return a route-duration
+polygon for the requested round-trip minute budget, not a simple geometric
+circle.
+
 Additional account/admin environment variables:
 
 ```env

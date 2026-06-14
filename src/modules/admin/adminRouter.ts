@@ -25,6 +25,7 @@ const accountUpdateSchema = z.object({
 });
 
 const isochroneSchema = z.object({
+  force: z.boolean().optional(),
   origin: z.object({
     address: z.string().optional(),
     lat: z.number().optional(),

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { FieldValue } from "firebase-admin/firestore";
 import { getBayblazeFirestore } from "../../clients/firebaseAdminClient";
 import { forwardAdminOrderDetailRequest, forwardAdminOrdersRequest } from "../../clients/medusaAdminClient";
 import { sendUpstreamJson } from "../../http/upstream";
@@ -5,8 +7,14 @@ import { searchAccounts, updateAccountAccess } from "../accounts/accountService"
 import type { AccountBadge, AccountRole } from "../accounts/accountTypes";
 import type { DriverDeliveryQueue, DriverLocationSnapshot, DriverProfile, VehicleRecord } from "../drivers/driverWorkflowTypes";
 import { ApiRequestError } from "../drivers/driverWorkflowService";
-import { geocodeAddress, type LatLng } from "../isochronos/googleMapsService";
+import { calculateRouteDuration, geocodeAddress, type LatLng } from "../isochronos/googleMapsService";
 import type { Response as ExpressResponse } from "express";
+
+const isochroneCacheCollection = "coverage_isochrones";
+const isochroneCacheTtlMs = 6 * 60 * 60 * 1000;
+const isochroneSampleBearings = 24;
+const isochroneBinarySearchIterations = 5;
+const isochroneAlgorithmVersion = "route_round_trip_radial_v1";
 
 export async function searchAdminAccounts(query: string, limit: number) {
   return {
@@ -102,6 +110,7 @@ export async function getAdminDriverRoutes() {
 }
 
 export async function createAdminIsochronePlot(input: {
+  force?: boolean;
   origin: { address?: string; lat?: number; lng?: number };
   speedMph?: number;
   travelMinutes: number;
@@ -109,16 +118,33 @@ export async function createAdminIsochronePlot(input: {
   const origin = await resolveOrigin(input.origin);
   const travelMinutes = clamp(input.travelMinutes, 1, 180);
   const speedMph = clamp(input.speedMph ?? 30, 5, 70);
-  const radiusMeters = speedMph * 1609.344 * (travelMinutes / 60);
+  const cacheKey = createIsochroneCacheKey(origin, speedMph, travelMinutes);
+  const cached = input.force ? null : await getCachedIsochronePlot(cacheKey);
 
-  return {
+  if (cached) {
+    return cached;
+  }
+
+  const maxOutboundMeters = speedMph * 1609.344 * (travelMinutes / 120);
+  const boundary = await mapWithConcurrency(
+    Array.from({ length: isochroneSampleBearings }, (_, index) => (360 / isochroneSampleBearings) * index),
+    4,
+    (bearing) => findRoundTripBoundaryPoint(origin, bearing, maxOutboundMeters, travelMinutes),
+  );
+  const polygon = closePolygon(boundary.filter(Boolean) as LatLng[]);
+  const radiusMeters = Math.max(...polygon.map((point) => distanceMeters(origin, point)), 0);
+  const plot = {
     center: origin,
-    method: "estimated_drive_radius",
-    polygon: createCirclePolygon(origin, radiusMeters, 72),
+    method: isochroneAlgorithmVersion,
+    polygon,
     radiusMeters: Math.round(radiusMeters),
     speedMph,
     travelMinutes,
   };
+
+  await storeCachedIsochronePlot(cacheKey, plot);
+
+  return plot;
 }
 
 export async function sendAdminOrders(res: ExpressResponse, query: URLSearchParams) {
@@ -162,30 +188,159 @@ async function resolveOrigin(origin: { address?: string; lat?: number; lng?: num
   };
 }
 
-function createCirclePolygon(center: LatLng, radiusMeters: number, points: number) {
+async function findRoundTripBoundaryPoint(origin: LatLng, bearingDegrees: number, maxMeters: number, maxMinutes: number) {
+  let accepted = origin;
+  let lowMeters = 0;
+  let highMeters = maxMeters;
+
+  for (let index = 0; index < isochroneBinarySearchIterations; index += 1) {
+    const candidateMeters = (lowMeters + highMeters) / 2;
+    const candidate = destinationPoint(origin, bearingDegrees, candidateMeters);
+    const durationMinutes = await calculateRoundTripMinutes(origin, candidate).catch(() => Number.POSITIVE_INFINITY);
+
+    if (durationMinutes <= maxMinutes) {
+      accepted = candidate;
+      lowMeters = candidateMeters;
+    } else {
+      highMeters = candidateMeters;
+    }
+  }
+
+  return accepted;
+}
+
+async function calculateRoundTripMinutes(origin: LatLng, destination: LatLng) {
+  const [outbound, inbound] = await Promise.all([
+    calculateRouteDuration([origin, destination]),
+    calculateRouteDuration([destination, origin]),
+  ]);
+
+  return (outbound.durationSeconds + inbound.durationSeconds) / 60;
+}
+
+function destinationPoint(center: LatLng, bearingDegrees: number, distanceMeters: number) {
   const earthRadiusMeters = 6_371_000;
   const latRadians = toRadians(center.lat);
   const lngRadians = toRadians(center.lng);
-  const angularDistance = radiusMeters / earthRadiusMeters;
-
-  return Array.from({ length: points + 1 }, (_, index) => {
-    const bearing = (2 * Math.PI * index) / points;
-    const lat = Math.asin(
-      Math.sin(latRadians) * Math.cos(angularDistance) +
-        Math.cos(latRadians) * Math.sin(angularDistance) * Math.cos(bearing),
+  const bearing = toRadians(bearingDegrees);
+  const angularDistance = distanceMeters / earthRadiusMeters;
+  const lat = Math.asin(
+    Math.sin(latRadians) * Math.cos(angularDistance) +
+      Math.cos(latRadians) * Math.sin(angularDistance) * Math.cos(bearing),
+  );
+  const lng =
+    lngRadians +
+    Math.atan2(
+      Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(latRadians),
+      Math.cos(angularDistance) - Math.sin(latRadians) * Math.sin(lat),
     );
-    const lng =
-      lngRadians +
-      Math.atan2(
-        Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(latRadians),
-        Math.cos(angularDistance) - Math.sin(latRadians) * Math.sin(lat),
-      );
 
-    return {
-      lat: toDegrees(lat),
-      lng: toDegrees(lng),
-    };
+  return {
+    lat: toDegrees(lat),
+    lng: toDegrees(lng),
+  };
+}
+
+function distanceMeters(origin: LatLng, destination: LatLng) {
+  const earthRadiusMeters = 6_371_000;
+  const latDelta = toRadians(destination.lat - origin.lat);
+  const lngDelta = toRadians(destination.lng - origin.lng);
+  const originLat = toRadians(origin.lat);
+  const destinationLat = toRadians(destination.lat);
+  const a =
+    Math.sin(latDelta / 2) ** 2 +
+    Math.cos(originLat) * Math.cos(destinationLat) * Math.sin(lngDelta / 2) ** 2;
+
+  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function closePolygon(points: LatLng[]) {
+  if (points.length === 0) {
+    return [];
+  }
+
+  const first = points[0];
+  const last = points[points.length - 1];
+
+  if (first.lat === last.lat && first.lng === last.lng) {
+    return points;
+  }
+
+  return [...points, first];
+}
+
+async function getCachedIsochronePlot(cacheKey: string) {
+  const snapshot = await getBayblazeFirestore().collection(isochroneCacheCollection).doc(cacheKey).get();
+
+  if (!snapshot.exists) {
+    return null;
+  }
+
+  const data = snapshot.data() ?? {};
+  const expiresAtMillis = data.expiresAt?.toMillis?.() ?? 0;
+
+  if (expiresAtMillis < Date.now() || !Array.isArray(data.polygon)) {
+    return null;
+  }
+
+  return {
+    center: data.center as LatLng & { address?: string },
+    method: String(data.method || isochroneAlgorithmVersion),
+    polygon: data.polygon as LatLng[],
+    radiusMeters: Number(data.radiusMeters) || 0,
+    speedMph: Number(data.speedMph) || 0,
+    travelMinutes: Number(data.travelMinutes) || 0,
+  };
+}
+
+async function storeCachedIsochronePlot(cacheKey: string, plot: {
+  center: LatLng & { address?: string };
+  method: string;
+  polygon: LatLng[];
+  radiusMeters: number;
+  speedMph: number;
+  travelMinutes: number;
+}) {
+  await getBayblazeFirestore().collection(isochroneCacheCollection).doc(cacheKey).set({
+    ...plot,
+    algorithmVersion: isochroneAlgorithmVersion,
+    expiresAt: new Date(Date.now() + isochroneCacheTtlMs),
+    updatedAt: FieldValue.serverTimestamp(),
   });
+}
+
+function createIsochroneCacheKey(origin: LatLng, speedMph: number, travelMinutes: number) {
+  return createHash("sha256")
+    .update([
+      isochroneAlgorithmVersion,
+      origin.lat.toFixed(6),
+      origin.lng.toFixed(6),
+      String(speedMph),
+      String(travelMinutes),
+      String(isochroneSampleBearings),
+      String(isochroneBinarySearchIterations),
+    ].join(":"))
+    .digest("hex");
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>,
+) {
+  const results: R[] = [];
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await mapper(items[index]);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  return results;
 }
 
 function clamp(value: number, min: number, max: number) {
