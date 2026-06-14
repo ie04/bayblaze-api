@@ -299,6 +299,10 @@ Production `/opt/bayblaze/bayblaze-api/.env.production` should keep the same
 comma-separated OAuth redirect allowlist. It was updated on June 14, 2026 to
 include the driver and inventory callback URLs alongside the storefront
 callback.
+The same URLs must also be present in the Google Cloud OAuth web client's
+Authorized redirect URIs. If `GOOGLE_OAUTH_REDIRECT_URL` allows a callback but
+Google Cloud does not, the app reaches Google and fails with
+`Error 400: redirect_uri_mismatch`.
 
 ## June 2026 Common API Bridge
 
