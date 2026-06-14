@@ -5,6 +5,7 @@ import path from "node:path";
 import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
 import { ContainerRegistrationKeys } from "@medusajs/framework/utils";
 import {
+  batchInventoryItemLevelsWorkflow,
   createProductVariantsWorkflow,
   createProductOptionsWorkflow,
   createProductsWorkflow,
@@ -81,6 +82,22 @@ type SalesChannel = {
   name?: string | null;
 };
 
+type StockLocation = {
+  id: string;
+  name?: string | null;
+};
+
+type ProductVariantInventoryItem = {
+  inventory_item_id?: string | null;
+  variant_id?: string | null;
+};
+
+type InventoryLevel = {
+  id: string;
+  inventory_item_id?: string | null;
+  location_id?: string | null;
+};
+
 type ProductCollection = {
   id: string;
   title?: string | null;
@@ -131,6 +148,8 @@ type VariantDraft = {
 type ProductWithVariantDraft = ProductDraft & {
   variant?: VariantDraft;
 };
+
+const localDeliveryStockLocationName = "Bayblaze Local Delivery Hub";
 
 const productFields = [
   "id",
@@ -227,10 +246,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
         mutation.draft as VariantDraft | undefined,
       );
     } else if (mutation.type === "update-quantity") {
-      await updateVariantMetadata(req, mutation, (metadata) => ({
-        ...metadata,
-        availableQuantity: readQuantity(mutation.quantity),
-      }));
+      await updateVariantQuantity(req, mutation);
     } else if (mutation.type === "assign-vehicle") {
       const vehicleId = readString(mutation.vehicleId);
       await updateVariantMetadata(req, mutation, (metadata) => ({
@@ -365,7 +381,7 @@ async function createProductWithVariant(
     throw new Error("Variant name and SKU are required.");
   }
 
-  await createProductsWorkflow(req.scope).run({
+  const { result: products } = await createProductsWorkflow(req.scope).run({
     input: {
       products: [
         {
@@ -411,6 +427,14 @@ async function createProductWithVariant(
       ],
     },
   });
+
+  const createdVariantId = products[0]?.variants?.find(
+    (variant) => variant.sku === sku,
+  )?.id;
+
+  if (createdVariantId) {
+    await syncVariantInventoryLevel(req, createdVariantId, readQuantity(variantDraft.quantity));
+  }
 }
 
 async function updateProductDetails(
@@ -534,7 +558,7 @@ async function createVariant(
   const inventoryState = readInventoryState(draft?.inventoryState);
   const variantImageUrls = await resolveVariantImageUrls(req, draft);
 
-  await createProductVariantsWorkflow(req.scope).run({
+  const { result: variants } = await createProductVariantsWorkflow(req.scope).run({
     input: {
       product_variants: [
         {
@@ -558,7 +582,29 @@ async function createVariant(
     },
   });
 
+  if (variants[0]?.id) {
+    await syncVariantInventoryLevel(req, variants[0].id, readQuantity(draft.quantity));
+  }
+
   await syncPublishedProductStorefrontVisibility(req, productId);
+}
+
+async function updateVariantQuantity(
+  req: MedusaRequest,
+  mutation: Record<string, unknown>,
+) {
+  const variantId = readString(mutation.variantId);
+  const quantity = readQuantity(mutation.quantity);
+
+  if (!variantId) {
+    throw new Error("Variant ID is required.");
+  }
+
+  await updateVariantMetadata(req, mutation, (metadata) => ({
+    ...metadata,
+    availableQuantity: quantity,
+  }));
+  await syncVariantInventoryLevel(req, variantId, quantity);
 }
 
 async function updateVariantMetadata(
@@ -630,6 +676,10 @@ async function updateVariantDetails(
       product_variants: [removeUndefined(update)],
     },
   });
+
+  if (draft && Object.prototype.hasOwnProperty.call(draft, "quantity")) {
+    await syncVariantInventoryLevel(req, variantId, readQuantity(draft.quantity));
+  }
 
   await syncPublishedProductStorefrontVisibility(req, variant.product_id);
 }
@@ -800,6 +850,85 @@ async function getStorefrontSalesChannel(req: MedusaRequest) {
     const name = readString(salesChannel.name).toLowerCase();
     return name.includes("bayblaze") || name.includes("storefront") || name.includes("default");
   }) ?? salesChannels[0];
+}
+
+async function syncVariantInventoryLevel(
+  req: MedusaRequest,
+  variantId: string,
+  quantity: number,
+) {
+  const query = req.scope.resolve<Query>(ContainerRegistrationKeys.QUERY);
+  const inventoryItemId = await getVariantInventoryItemId(query, variantId);
+  const stockLocationId = await getLocalDeliveryStockLocationId(query);
+  const existingLevel = await getInventoryLevel(query, inventoryItemId, stockLocationId);
+  const levelDraft = {
+    inventory_item_id: inventoryItemId,
+    location_id: stockLocationId,
+    stocked_quantity: quantity,
+  };
+
+  await batchInventoryItemLevelsWorkflow(req.scope).run({
+    input: existingLevel
+      ? {
+          update: [
+            {
+              ...levelDraft,
+              id: existingLevel.id,
+            },
+          ],
+        }
+      : {
+          create: [levelDraft],
+        },
+  });
+}
+
+async function getVariantInventoryItemId(query: Query, variantId: string) {
+  const { data: inventoryItems } = await query.graph<ProductVariantInventoryItem>({
+    entity: "product_variant_inventory_item",
+    fields: ["variant_id", "inventory_item_id"],
+    filters: { variant_id: variantId },
+  });
+  const inventoryItemId = readString(inventoryItems[0]?.inventory_item_id);
+
+  if (!inventoryItemId) {
+    throw new Error(`Variant ${variantId} is missing a Medusa inventory item.`);
+  }
+
+  return inventoryItemId;
+}
+
+async function getLocalDeliveryStockLocationId(query: Query) {
+  const { data: stockLocations } = await query.graph<StockLocation>({
+    entity: "stock_location",
+    fields: ["id", "name"],
+  });
+  const stockLocation = stockLocations.find(
+    (location) => readString(location.name) === localDeliveryStockLocationName,
+  ) ?? stockLocations[0];
+
+  if (!stockLocation) {
+    throw new Error("No Medusa stock location is available for inventory sync.");
+  }
+
+  return stockLocation.id;
+}
+
+async function getInventoryLevel(
+  query: Query,
+  inventoryItemId: string,
+  stockLocationId: string,
+) {
+  const { data: inventoryLevels } = await query.graph<InventoryLevel>({
+    entity: "inventory_level",
+    fields: ["id", "inventory_item_id", "location_id"],
+    filters: {
+      inventory_item_id: inventoryItemId,
+      location_id: stockLocationId,
+    },
+  });
+
+  return inventoryLevels[0];
 }
 
 function toInventoryProduct(product: Product) {

@@ -92,6 +92,12 @@ partitioning, and Google Maps usage guardrails.
   decimal-dollar price amounts on writes. For example, `1999` from the PWA must
   be written to Medusa as `19.99`, not `1999`; otherwise the storefront renders
   prices as `$1,999.00`.
+- The inventory endpoint must keep Medusa `inventory_level` rows in sync with
+  variant `availableQuantity` metadata for managed variants. New variants and
+  quantity edits should create or update stock at the `Bayblaze Local Delivery
+  Hub` stock location so checkout can associate the storefront sales channel
+  with an eligible stock location. On June 14, 2026, production variants missing
+  this level were backfilled from their `availableQuantity` metadata.
 - The Medusa inventory boundary is
   `/admin/bayblaze/inventory` and exports `AUTHENTICATE = false` so the route
   can validate `x-bayblaze-service-token` itself. The shared service-token
