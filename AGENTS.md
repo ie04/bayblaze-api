@@ -295,6 +295,11 @@ GOOGLE_OAUTH_CLIENT_SECRET=<google oauth client secret>
 GOOGLE_OAUTH_REDIRECT_URL=https://bayblaze.net/api/auth/oauth/google/callback,https://driver.bayblaze.net/auth/google/callback,https://inventory.bayblaze.net/auth/google/callback
 ```
 
+Production `/opt/bayblaze/bayblaze-api/.env.production` should keep the same
+comma-separated OAuth redirect allowlist. It was updated on June 14, 2026 to
+include the driver and inventory callback URLs alongside the storefront
+callback.
+
 ## June 2026 Common API Bridge
 
 `bayblaze-api` now exposes the first shared bridge routes for existing
