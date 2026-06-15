@@ -203,6 +203,10 @@ Medusa submits BayBlaze delivery labels from an `order.placed` subscriber at
   `invoice:{order.id}` with `jobType: "invoice"`. The invoice prints alongside
   the delivery label and must include itemized order details, discount/totals,
   payment method, delivery address, and a customer signature line.
+- Storefront checkout metadata should preserve `requested_items` with quantity
+  plus cents-based `unit_price_cents` and `total_cents`. The invoice subscriber
+  may receive incomplete Medusa `items.*` expansions from `query.graph`, so it
+  must fall back to that checkout snapshot before printing item rows or totals.
 - Label-agent idempotency must include both `orderId` and `jobType`; otherwise
   the invoice job can be incorrectly skipped after the delivery label prints.
 

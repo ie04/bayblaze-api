@@ -25,10 +25,21 @@ type BayblazeOrderItem = {
   title?: string | null;
   variant_title?: string | null;
   subtitle?: string | null;
-  quantity?: number | null;
-  unit_price?: number | null;
-  subtotal?: number | null;
-  total?: number | null;
+  quantity?: unknown;
+  unit_price?: unknown;
+  subtotal?: unknown;
+  total?: unknown;
+  raw_quantity?: unknown;
+  raw_unit_price?: unknown;
+  raw_subtotal?: unknown;
+  raw_total?: unknown;
+  detail?: Record<string, unknown> | null;
+  product?: {
+    title?: string | null;
+  } | null;
+  variant?: {
+    title?: string | null;
+  } | null;
 };
 
 type BayblazeOrder = {
@@ -99,6 +110,9 @@ const orderFields = [
   "tax_total",
   "total",
   "items.*",
+  "items.detail.*",
+  "items.product.*",
+  "items.variant.*",
   "metadata",
   "shipping_address.*",
 ];
@@ -252,16 +266,28 @@ function toInvoicePrintJob(order: BayblazeOrder): InvoicePrintJob {
     metadata.checkout_address_line_2,
     metadata.customer_address_line_2,
   );
-  const subtotal = readMoney(order.subtotal);
-  const discountTotal = readMoney(
-    order.discount_total,
-    metadata.bayblaze_referral_discount_amount,
-    metadata.referral_discount_amount,
-  );
+  const invoiceItems = normalizeInvoiceItems(order.items, metadata);
+  const itemsSubtotal = invoiceItems.reduce((sum, item) => sum + item.total, 0);
+  const subtotal =
+    readMoney(order.subtotal) ||
+    readDollarMoney(metadata.first_order_offer_subtotal) ||
+    itemsSubtotal;
+  const discountTotal =
+    readMoney(order.discount_total) ||
+    readDollarMoney(
+      metadata.first_order_offer_discount_amount,
+      metadata.bayblaze_referral_discount_amount,
+      metadata.referral_discount_amount,
+    );
   const shippingTotal = readMoney(order.shipping_total);
   const taxTotal = readMoney(order.tax_total);
   const total =
     readMoney(order.total) ||
+    readDollarMoney(
+      metadata.first_order_offer_total_after_discount,
+      metadata.bayblaze_referral_total_after_discount,
+      metadata.referral_total_after_discount,
+    ) ||
     Math.max(0, subtotal - discountTotal + shippingTotal + taxTotal);
 
   return {
@@ -281,7 +307,7 @@ function toInvoicePrintJob(order: BayblazeOrder): InvoicePrintJob {
       metadata.instructions,
     ),
     currencyCode: readString(order.currency_code).toUpperCase() || "USD",
-    items: normalizeInvoiceItems(order.items),
+    items: invoiceItems,
     totals: {
       subtotal,
       discountTotal,
@@ -293,25 +319,86 @@ function toInvoicePrintJob(order: BayblazeOrder): InvoicePrintJob {
   };
 }
 
-function normalizeInvoiceItems(items?: BayblazeOrderItem[] | null) {
-  return (items ?? []).map((item) => {
-    const quantity =
-      typeof item.quantity === "number" && Number.isFinite(item.quantity)
-        ? item.quantity
-        : 0;
-    const total = readMoney(item.total, item.subtotal);
-    const unitPrice =
-      readMoney(item.unit_price) ||
-      (quantity > 0 ? Math.round(total / quantity) : 0);
+function normalizeInvoiceItems(
+  items?: BayblazeOrderItem[] | null,
+  metadata?: Record<string, unknown> | null,
+) {
+  const medusaItems = (items ?? [])
+    .map((item) => {
+      const detail = item.detail ?? {};
+      const quantity = readQuantity(
+        item.quantity,
+        item.raw_quantity,
+        detail.quantity,
+        detail.raw_quantity,
+      );
+      const total = readMoney(
+        item.total,
+        item.raw_total,
+        item.subtotal,
+        item.raw_subtotal,
+        detail.total,
+        detail.raw_total,
+        detail.subtotal,
+        detail.raw_subtotal,
+      );
+      const unitPrice =
+        readMoney(
+          item.unit_price,
+          item.raw_unit_price,
+          detail.unit_price,
+          detail.raw_unit_price,
+        ) || (quantity > 0 ? Math.round(total / quantity) : 0);
 
-    return {
-      title: readString(item.title, item.subtitle, "Item"),
-      variantTitle: readString(item.variant_title),
-      quantity,
-      unitPrice,
-      total,
-    };
-  });
+      return {
+        title: readString(item.title, item.product?.title, item.subtitle, "Item"),
+        variantTitle: readString(item.variant_title, item.variant?.title),
+        quantity,
+        unitPrice,
+        total,
+      };
+    })
+    .filter((item) => item.quantity > 0 || item.total > 0);
+
+  return medusaItems.length ? medusaItems : readRequestedInvoiceItems(metadata);
+}
+
+function readRequestedInvoiceItems(metadata?: Record<string, unknown> | null) {
+  const requestedItems = metadata?.requested_items;
+
+  if (!Array.isArray(requestedItems)) {
+    return [];
+  }
+
+  return requestedItems
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+
+      const record = item as Record<string, unknown>;
+      const quantity = readQuantity(record.quantity, 1);
+      const unitPrice = readMoney(
+        record.unit_price_cents,
+        record.unit_price,
+        record.price_cents,
+        record.price,
+      );
+      const total =
+        readMoney(record.total_cents, record.total, record.line_total_cents) ||
+        unitPrice * quantity;
+
+      return {
+        title: readString(record.name, "Item"),
+        variantTitle: readString(record.flavor),
+        quantity,
+        unitPrice: unitPrice || (quantity > 0 ? Math.round(total / quantity) : 0),
+        total,
+      };
+    })
+    .filter((item): item is InvoicePrintJob["items"][number] => {
+      return Boolean(item && (item.quantity > 0 || item.total > 0));
+    });
 }
 
 function getOrderNumber(order: BayblazeOrder) {
@@ -391,10 +478,62 @@ function readMoney(...values: unknown[]) {
       return Math.round(value);
     }
 
+    if (typeof value === "object" && value !== null) {
+      const record = value as Record<string, unknown>;
+      const nested = readMoney(record.value, record.amount);
+
+      if (nested > 0) {
+        return nested;
+      }
+    }
+
     if (typeof value === "string" && value.trim()) {
       const parsed = Number(value.replace(/[^\d.-]/g, ""));
       if (Number.isFinite(parsed)) {
-        return Math.round(parsed);
+        return value.includes(".") ? Math.round(parsed * 100) : Math.round(parsed);
+      }
+    }
+  }
+
+  return 0;
+}
+
+function readDollarMoney(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.round(value * 100);
+    }
+
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value.replace(/[^\d.-]/g, ""));
+      if (Number.isFinite(parsed)) {
+        return Math.round(parsed * 100);
+      }
+    }
+  }
+
+  return 0;
+}
+
+function readQuantity(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.max(0, Math.round(value));
+    }
+
+    if (typeof value === "object" && value !== null) {
+      const record = value as Record<string, unknown>;
+      const nested = readQuantity(record.value, record.amount);
+
+      if (nested > 0) {
+        return nested;
+      }
+    }
+
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value.replace(/[^\d.-]/g, ""));
+      if (Number.isFinite(parsed)) {
+        return Math.max(0, Math.round(parsed));
       }
     }
   }
