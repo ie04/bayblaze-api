@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 
+import { forwardAdminOrderCancelRequest } from "../../clients/medusaAdminClient";
 import { requireApiServiceToken } from "../../http/middleware/apiServiceAuth";
 import { getOrderLiveTracking } from "../isochronos/orderLiveTrackingService";
 
@@ -21,6 +22,21 @@ const liveTrackingSchema = z.object({
 export function createOrderBridgeRouter() {
   const router = Router();
 
+  router.post("/orders/:orderId/cancel", requireApiServiceToken, async (req, res, next) => {
+    try {
+      const orderId = readParamString(req.params.orderId);
+
+      if (!orderId) {
+        return res.status(400).json({ message: "Order ID is required." });
+      }
+
+      const upstream = await forwardAdminOrderCancelRequest(orderId);
+      await sendUpstreamJson(res, upstream, "Medusa order cancellation returned a non-JSON response.");
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
   router.post("/orders/live-tracking", requireApiServiceToken, async (req, res, next) => {
     try {
       const parsed = liveTrackingSchema.parse(req.body);
@@ -31,4 +47,38 @@ export function createOrderBridgeRouter() {
   });
 
   return router;
+}
+
+function readParamString(value: unknown) {
+  if (Array.isArray(value)) {
+    return typeof value[0] === "string" ? value[0].trim() : "";
+  }
+
+  return typeof value === "string" ? value.trim() : "";
+}
+
+async function sendUpstreamJson(
+  res: {
+    status: (status: number) => {
+      json: (body: unknown) => void;
+      send: (body: string) => void;
+    };
+  },
+  upstream: Response,
+  fallbackMessage: string,
+) {
+  const text = await upstream.text();
+
+  if (!text.trim()) {
+    return res.status(upstream.status).send("");
+  }
+
+  try {
+    return res.status(upstream.status).json(JSON.parse(text));
+  } catch {
+    return res.status(upstream.ok ? 502 : upstream.status).json({
+      message: fallbackMessage,
+      upstreamStatus: upstream.status,
+    });
+  }
 }

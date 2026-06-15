@@ -25,3 +25,18 @@ export function forwardAdminOrderDetailRequest(orderId: string) {
     method: "GET",
   });
 }
+
+export function forwardAdminOrderCancelRequest(orderId: string) {
+  const medusaBackendUrl = getMedusaBackendUrl();
+  const basePath = env.MEDUSA_ADMIN_ORDERS_PATH.replace(/\/$/, "");
+  const url = new URL(`${basePath}/${encodeURIComponent(orderId)}`, medusaBackendUrl);
+
+  return fetch(url, {
+    headers: createBayblazeMedusaHeaders({
+      acceptJson: true,
+      contentTypeJson: true,
+    }),
+    method: "POST",
+    body: JSON.stringify({ action: "cancel" }),
+  });
+}

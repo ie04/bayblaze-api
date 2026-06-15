@@ -330,6 +330,7 @@ GET      /v1/inventory/images/:filename
 DELETE   /v1/inventory/images
 POST     /v1/checkout/eligibility
 POST     /v1/orders/live-tracking
+POST     /v1/orders/:orderId/cancel
 GET      /v1/drivers/:uid/queue
 POST     /v1/drivers/queues/score
 POST     /v1/drivers/location
@@ -362,9 +363,14 @@ MEDUSA_ADMIN_ORDERS_PATH=/admin/bayblaze/orders
 ```
 
 `POST /v1/checkout/eligibility`, `POST /v1/orders/live-tracking`,
-`POST /v1/drivers/queues/score`, and `POST /v1/drivers/location` now execute
-inside `bayblaze-api`; do not configure old IsoChronos path variables for these
-app-facing contracts.
+`POST /v1/orders/:orderId/cancel`, `POST /v1/drivers/queues/score`, and
+`POST /v1/drivers/location` now execute inside `bayblaze-api`; do not configure
+old IsoChronos path variables for these app-facing contracts.
+
+Customer order cancellation is app-server initiated only: the storefront
+`/api/orders/[orderId]` route calls `bayblaze-api`, which forwards to embedded
+Medusa `/admin/bayblaze/orders/{orderId}`. Medusa restores each ordered
+variant's `availableQuantity` plus inventory level before deleting the order.
 
 ## Module boundaries
 

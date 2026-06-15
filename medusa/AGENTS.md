@@ -128,6 +128,10 @@ partitioning, and Google Maps usage guardrails.
   `MEDUSA_ADMIN_ORDERS_PATH=/admin/bayblaze/orders`; do not point it at native
   `/admin/orders` unless the API is changed to use a real Medusa admin auth
   flow.
+- Customer cancellation also uses `/admin/bayblaze/orders/{orderId}` via POST
+  from `bayblaze-api`. It must restore each ordered variant's
+  `availableQuantity` metadata and Medusa inventory level from the order item
+  snapshot before calling `orderModuleService.deleteOrders` to clear the order.
 - BayBlaze customer Google OAuth is owned by `bayblaze-api`, not Medusa's
   native OAuth routes. After `bayblaze-api` verifies Google and creates/finds
   the BayBlaze account, it calls Medusa service route
