@@ -119,6 +119,14 @@ Medusa Dockerfiles, and Medusa compose files. The root API Dockerfile excludes
 the Medusa compose files under `medusa/` when deploying both services from this
 repo.
 
+Current production deployment caveat: `.github/workflows/deploy.yml` deploys
+only the `bayblaze-api` container from `/opt/bayblaze/bayblaze-api`; it does
+not rebuild the embedded Medusa service under `/opt/bayblaze/medusa`. Until a
+Medusa deploy workflow is restored in this repo, production Medusa changes need
+an explicit sync of `bayblaze-api/medusa/` to `/opt/bayblaze/medusa` followed
+by `docker compose -f docker-compose.yml build medusa` and
+`docker compose -f docker-compose.yml up -d --remove-orphans` on the VPS.
+
 API-to-Medusa service auth should use one canonical secret:
 
 ```env

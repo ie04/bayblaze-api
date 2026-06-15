@@ -245,29 +245,27 @@ Runner details:
 The runner service should be installed from `/opt/github-runners/bayblaze-medusa`
 and run as `github-runner`. The `github-runner` user needs Docker access.
 
-Pushes to `main` should run deploy commands directly on the VPS with the active
-compose file, `docker-compose.yml`:
+Current caveat: after the Medusa repo consolidation, the active
+`bayblaze-api/.github/workflows/deploy.yml` deploys only the API container from
+`/opt/bayblaze/bayblaze-api`; it does not rebuild this embedded Medusa service.
+Until a Medusa deploy workflow is restored, deploy Medusa changes by syncing
+`bayblaze-api/medusa/` to `/opt/bayblaze/medusa` while preserving `.env` and
+`uploads`, then run the active compose file, `docker-compose.yml`:
 
 ```bash
 cd /opt/bayblaze/medusa
-git fetch origin main
-git reset --hard origin/main
+rsync source should exclude .env, .env.production, node_modules, apps/backend/.medusa, and uploads
 BAYBLAZE_DRIVER_SERVICE_TOKEN=... docker compose -f docker-compose.yml build medusa
 BAYBLAZE_DRIVER_SERVICE_TOKEN=... docker compose -f docker-compose.yml run --rm medusa npx medusa db:migrate
 BAYBLAZE_DRIVER_SERVICE_TOKEN=... docker compose -f docker-compose.yml up -d --remove-orphans
 docker image prune -f
 ```
 
-Normal backend deploy flow:
+Code changes should still be committed and pushed to `bayblaze-api`; the manual
+sync is only the current production activation step for embedded Medusa changes.
 
-```bash
-git add .
-git commit -m "message"
-git push
-```
-
-Do not manually SSH into the VPS to run `git pull`, rebuild, migrate, or restart
-for normal deploys. The self-hosted GitHub Actions workflow handles that.
+Do not run `git pull` or `git reset` in `/opt/bayblaze/medusa`; it is currently
+a synced deployment tree rather than a git checkout.
 
 Customer Google OAuth is configured in the Medusa Auth Module and is initiated
 from the storefront `/login` page. Required backend environment variables:
