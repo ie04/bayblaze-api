@@ -21,6 +21,7 @@ import {
   listAvailableVehicles,
   logDeliveryAttempt,
   registerDriverNotificationToken,
+  reprintDriverDeliveryLabels,
   saveDriverProfile,
   syncDriverDeliveryQueue,
   writeDriverLocationSnapshot,
@@ -210,6 +211,15 @@ export function createDriverWorkflowRouter() {
     try {
       const parsed = deliveryAttemptSchema.parse(req.body);
       await logDeliveryAttempt(readUid(req), parsed);
+      res.json({ ok: true });
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/driver/me/deliveries/:orderId/reprint-labels", async (req: DriverAuthedRequest, res, next) => {
+    try {
+      await reprintDriverDeliveryLabels(readUid(req), readRouteParam(req.params.orderId));
       res.json({ ok: true });
     } catch (caught) {
       next(caught);

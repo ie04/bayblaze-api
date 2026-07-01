@@ -25,6 +25,7 @@ const envSchema = z
 
     MEDUSA_DRIVER_QUEUE_PATH: z.string().optional().default("/admin/bayblaze/driver-queues/{uid}"),
     MEDUSA_DELIVERY_ATTEMPT_PATH: z.string().optional().default("/admin/bayblaze/delivery-attempts"),
+    MEDUSA_REPRINT_LABELS_PATH: z.string().optional().default("/admin/bayblaze/orders/{orderId}/reprint-labels"),
     MEDUSA_ADMIN_ORDERS_PATH: z.string().optional().default("/admin/bayblaze/orders"),
     MEDUSA_CUSTOMER_SESSION_PATH: z.string().optional().default("/admin/bayblaze/customer-sessions"),
 

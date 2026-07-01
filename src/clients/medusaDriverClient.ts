@@ -25,3 +25,17 @@ export function forwardDeliveryAttempt(body: unknown) {
     method: "POST",
   });
 }
+
+export function forwardReprintLabelsRequest(orderId: string, body: unknown) {
+  const medusaBackendUrl = getMedusaBackendUrl();
+  const path = env.MEDUSA_REPRINT_LABELS_PATH.replace("{orderId}", encodeURIComponent(orderId));
+
+  return fetch(new URL(path, medusaBackendUrl), {
+    body: JSON.stringify(body ?? {}),
+    headers: createBayblazeMedusaHeaders({
+      acceptJson: true,
+      contentTypeJson: true,
+    }),
+    method: "POST",
+  });
+}

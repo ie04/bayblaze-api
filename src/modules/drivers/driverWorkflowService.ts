@@ -1,7 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 
 import { getBayblazeFirestore } from "../../clients/firebaseAdminClient";
-import { forwardDeliveryAttempt, forwardDriverQueueRequest } from "../../clients/medusaDriverClient";
+import { forwardDeliveryAttempt, forwardDriverQueueRequest, forwardReprintLabelsRequest } from "../../clients/medusaDriverClient";
 import { lockQueueHead, normalizeDriverQueuePayload, removeUndefinedValues } from "./driverQueueNormalizer";
 import { scoreDriverDeliveryQueue } from "../isochronos/driverQueueScoringService";
 import { sendDriverAssignmentAlerts } from "./driverAssignmentAlertService";
@@ -168,6 +168,30 @@ export async function syncDriverDeliveryQueue(uid: string) {
 export async function getDriverDeliveryQueue(uid: string) {
   const snapshot = await getBayblazeFirestore().collection("driver_delivery_queues").doc(uid).get();
   return snapshot.exists ? (snapshot.data() as DriverDeliveryQueue) : null;
+}
+
+export async function reprintDriverDeliveryLabels(uid: string, orderId: string) {
+  const safeOrderId = readString(orderId);
+  const queue = await getDriverDeliveryQueue(uid);
+  const stop = queue?.stops.find((candidate) =>
+    candidate.orderId === safeOrderId ||
+    candidate.medusaOrderId === safeOrderId ||
+    candidate.orderReference === safeOrderId,
+  );
+
+  if (!safeOrderId) {
+    throw new ApiRequestError(400, "Order ID is required.");
+  }
+
+  if (!stop) {
+    throw new ApiRequestError(404, "That delivery is not in your active route.");
+  }
+
+  const upstream = await forwardReprintLabelsRequest(stop.medusaOrderId || stop.orderId, {
+    requestedBy: "driver",
+    uid,
+  });
+  await readJsonResponse(upstream, "Medusa label reprint");
 }
 
 export async function writeDriverLocationSnapshot(uid: string, snapshot: Omit<DriverLocationSnapshot, "uid">) {

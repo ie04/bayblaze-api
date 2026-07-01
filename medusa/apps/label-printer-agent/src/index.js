@@ -129,7 +129,10 @@ function startServer() {
 
       const printedJobs = await readPrintedJobs();
 
-      if (printedJobs[dedupeKey] || printedJobs[job.jobId] || hasPrintedOrder(printedJobs, job)) {
+      if (
+        !job.forceReprint &&
+        (printedJobs[dedupeKey] || printedJobs[job.jobId] || hasPrintedOrder(printedJobs, job))
+      ) {
         return res.status(200).json({
           ok: true,
           skipped: true,
@@ -265,6 +268,7 @@ function validateJob(body) {
     paymentMethod: typeof job.paymentMethod === "string" && job.paymentMethod.trim()
       ? job.paymentMethod.trim()
       : "Pay on delivery",
+    forceReprint: job.forceReprint === true,
   };
 }
 

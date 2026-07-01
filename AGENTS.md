@@ -193,6 +193,7 @@ POST   /v1/driver/me/queue/sync
 POST   /v1/driver/me/location
 POST   /v1/driver/me/delivery-attempts
 POST   /v1/driver/me/delivery-attempt-photos
+POST   /v1/driver/me/deliveries/:orderId/reprint-labels
 POST   /v1/driver/me/notification-tokens
 DELETE /v1/driver/me/notification-tokens/:tokenId
 ```
@@ -553,6 +554,15 @@ browser-safe public key must be exposed to `bayblaze-driver` as
 `VITE_BAYBLAZE_WEB_PUSH_PUBLIC_KEY`; private VAPID keys never belong in app
 repos.
 
+Driver label/invoice reprints are initiated by `bayblaze-driver` through
+`POST /v1/driver/me/deliveries/:orderId/reprint-labels`. `bayblaze-api`
+validates that the order is in the driver's active queue, then forwards to
+Medusa at `MEDUSA_REPRINT_LABELS_PATH` (default
+`/admin/bayblaze/orders/{orderId}/reprint-labels`). Medusa rebuilds delivery
+label and invoice jobs from order data and submits them to the existing label
+printer agent with `forceReprint: true`, which bypasses the agent's normal
+already-printed dedupe only for explicit reprint jobs.
+
 ## Variant and inventory contract
 
 Every sellable unit must be represented at the variant level.
@@ -869,6 +879,7 @@ MEDUSA_BACKEND_URL=http://medusa:9000
 BAYBLAZE_MEDUSA_SERVICE_TOKEN=...
 MEDUSA_DRIVER_QUEUE_PATH=/admin/bayblaze/driver-queues/{uid}
 MEDUSA_DELIVERY_ATTEMPT_PATH=/admin/bayblaze/delivery-attempts
+MEDUSA_REPRINT_LABELS_PATH=/admin/bayblaze/orders/{orderId}/reprint-labels
 MEDUSA_ADMIN_ORDERS_PATH=/admin/bayblaze/orders
 
 FIREBASE_PROJECT_ID=bayblaze-isochronos
