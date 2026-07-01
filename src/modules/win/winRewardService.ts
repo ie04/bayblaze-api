@@ -275,7 +275,7 @@ async function fetchInventorySnapshot() {
   }
 }
 
-function toFreebieProduct(product: InventoryProduct) {
+function toFreebieProduct(product: InventoryProduct): FreebieProduct | null {
   const variant = product.variants?.find(isAvailableOnVehicleVariant) ?? product.variants?.[0];
   const id = readString(product.id);
   const variantId = readString(variant?.id);
