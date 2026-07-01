@@ -29,6 +29,8 @@ const envSchema = z
     MEDUSA_ADMIN_ORDERS_PATH: z.string().optional().default("/admin/bayblaze/orders"),
     MEDUSA_CUSTOMER_SESSION_PATH: z.string().optional().default("/admin/bayblaze/customer-sessions"),
 
+    BAYBLAZE_STOREFRONT_URL: z.string().optional().default("https://bayblaze.net"),
+
     GOOGLE_MAPS_API_KEY: z.string().optional(),
     GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
     GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
