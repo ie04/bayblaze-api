@@ -44,6 +44,9 @@ const envSchema = z
     DRIVER_EMAIL_FROM: z.string().optional(),
     DRIVER_EMAIL_REPLY_TO: z.string().optional(),
     DRIVER_SIGNUP_CODE_TTL_MINUTES: z.coerce.number().int().positive().optional().default(15),
+    DRIVER_WEB_PUSH_PUBLIC_KEY: z.string().optional(),
+    DRIVER_WEB_PUSH_PRIVATE_KEY: z.string().optional(),
+    DRIVER_WEB_PUSH_SUBJECT: z.string().optional(),
 
     DRIVER_FIREBASE_PROJECT_ID: z.string().optional(),
     DRIVER_FIRESTORE_DATABASE_ID: z.string().optional(),

@@ -4,6 +4,7 @@ import { getBayblazeFirestore } from "../../clients/firebaseAdminClient";
 import { forwardDeliveryAttempt, forwardDriverQueueRequest } from "../../clients/medusaDriverClient";
 import { lockQueueHead, normalizeDriverQueuePayload, removeUndefinedValues } from "./driverQueueNormalizer";
 import { scoreDriverDeliveryQueue } from "../isochronos/driverQueueScoringService";
+import { sendDriverAssignmentAlerts } from "./driverAssignmentAlertService";
 import type {
   DeliveryAttemptLog,
   DriverDeliveryQueue,
@@ -145,13 +146,22 @@ export async function clockOutDriver(uid: string) {
 }
 
 export async function syncDriverDeliveryQueue(uid: string) {
+  const existingQueue = await getDriverDeliveryQueue(uid);
   const includeUnassigned = await shouldIncludeUnassignedOrders(uid);
   const medusaResponse = await forwardDriverQueueRequest(uid, includeUnassigned);
   const payload = await readJsonResponse(medusaResponse, "Medusa driver queue");
   const medusaQueue = normalizeDriverQueuePayload(uid, payload);
   const scoredQueue = await scoreDriverDeliveryQueue(medusaQueue);
+  const newStops = findNewDeliveryStops(existingQueue, scoredQueue);
 
   await writeDriverQueue(uid, scoredQueue);
+
+  if (newStops.length > 0) {
+    void sendDriverAssignmentAlerts(uid, newStops).catch((caught) => {
+      console.warn("Driver assignment alerts failed.", caught);
+    });
+  }
+
   return scoredQueue;
 }
 
@@ -330,6 +340,18 @@ async function rescoreExistingDriverQueue(uid: string) {
     stops: [nextStop, ...reorderableStops],
   });
   await writeDriverQueue(uid, scoredQueue);
+}
+
+function findNewDeliveryStops(
+  existingQueue: DriverDeliveryQueue | null,
+  nextQueue: DriverDeliveryQueue,
+) {
+  if (!existingQueue) {
+    return [];
+  }
+
+  const existingOrderIds = new Set(existingQueue.stops.map((stop) => stop.orderId));
+  return nextQueue.stops.filter((stop) => !existingOrderIds.has(stop.orderId));
 }
 
 async function readJsonResponse(response: globalThis.Response, upstreamName: string) {
