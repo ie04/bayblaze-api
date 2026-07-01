@@ -2,7 +2,9 @@ import { Router, type NextFunction, type Response } from "express";
 import { z } from "zod";
 
 import { requireAccountAuth, type AccountAuthedRequest } from "../../http/middleware/accountAuth";
+import { requireApiServiceToken } from "../../http/middleware/apiServiceAuth";
 import { ApiRequestError } from "../drivers/driverWorkflowService";
+import { completeWinReferral } from "./winReferralCompletionService";
 import {
   claimCustomerWinFreebie,
   getCustomerWinFreebies,
@@ -24,8 +26,23 @@ const freebieClaimSchema = z.object({
   variantId: z.string().optional(),
 });
 
+const completionSchema = z.object({
+  completedOrderId: z.string().optional(),
+  orderId: z.string().optional(),
+  referralCode: z.string().min(1),
+});
+
 export function createWinRewardRouter() {
   const router = Router();
+
+  router.post("/win/referrals/complete", requireApiServiceToken, async (req, res, next) => {
+    try {
+      const parsed = completionSchema.parse(req.body ?? {});
+      res.json(await completeWinReferral(parsed));
+    } catch (caught) {
+      next(caught);
+    }
+  });
 
   router.use("/customer/win", requireAccountAuth, requireCustomerBadge);
 
