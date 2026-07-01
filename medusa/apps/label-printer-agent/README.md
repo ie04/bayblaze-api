@@ -7,7 +7,7 @@ Small Windows 11 LAN service that receives Bayblaze order label jobs, renders a 
 1. Install Node.js 20 or newer on the Windows PC.
 2. From this folder, run `npm install`.
 3. Copy `.env.example` to `.env` and set:
-   - `LABEL_AGENT_TOKEN` to a long shared secret.
+   - `LABEL_AGENT_TOKEN` or `LABEL_PRINTER_AGENT_TOKEN` to a long shared secret.
    - `LABEL_PRINTER_NAME` to the exact Windows printer name.
 4. List printer names with:
 

@@ -157,16 +157,25 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
 }
 
 async function submitPrintJob(job: PrintJob, labelPrinterUrl: string) {
-  const response = await fetch(`${labelPrinterUrl}/print-label`, {
-    body: JSON.stringify(job),
-    headers: getLabelPrinterHeaders(),
-    method: "POST",
-  });
-  const responseBody = await response.text().catch(() => "");
+  let response: globalThis.Response | null = null;
+  let responseBody = "";
 
-  if (!response.ok) {
+  for (const headers of getLabelPrinterHeaderCandidates()) {
+    response = await fetch(`${labelPrinterUrl}/print-label`, {
+      body: JSON.stringify(job),
+      headers,
+      method: "POST",
+    });
+    responseBody = await response.text().catch(() => "");
+
+    if (response.status !== 401) {
+      break;
+    }
+  }
+
+  if (!response?.ok) {
     throw new Error(
-      `Label reprint failed for ${job.orderNumber}: ${response.status} ${response.statusText} ${responseBody}`,
+      `Label reprint failed for ${job.orderNumber}: ${response?.status ?? 500} ${response?.statusText ?? ""} ${responseBody}`,
     );
   }
 
@@ -394,20 +403,22 @@ function getLabelPrinterAgentUrl() {
   ).replace(/\/$/, "");
 }
 
-function getLabelPrinterHeaders() {
-  const headers: Record<string, string> = {
-    "content-type": "application/json",
-  };
-  const token =
-    process.env.LABEL_PRINTER_AGENT_TOKEN?.trim() ||
-    process.env.LABEL_AGENT_TOKEN?.trim();
+function getLabelPrinterHeaderCandidates() {
+  const tokens = [
+    process.env.LABEL_PRINTER_AGENT_TOKEN?.trim(),
+    process.env.LABEL_AGENT_TOKEN?.trim(),
+  ].filter((token): token is string => Boolean(token));
+  const uniqueTokens = Array.from(new Set(tokens));
 
-  if (token) {
-    headers.authorization = `Bearer ${token}`;
-    headers["x-label-printer-token"] = token;
+  if (uniqueTokens.length === 0) {
+    return [{ "content-type": "application/json" }];
   }
 
-  return headers;
+  return uniqueTokens.map((token) => ({
+    authorization: `Bearer ${token}`,
+    "content-type": "application/json",
+    "x-label-printer-token": token,
+  }));
 }
 
 function readRequestedBy(body: unknown) {

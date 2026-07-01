@@ -386,6 +386,8 @@ async function readJsonResponse(response: globalThis.Response, upstreamName: str
     const message =
       typeof payload.message === "string"
         ? payload.message
+        : typeof payload.error === "string"
+          ? payload.error
         : `${upstreamName} request failed with HTTP ${response.status}.`;
     throw new ApiRequestError(response.status, message);
   }

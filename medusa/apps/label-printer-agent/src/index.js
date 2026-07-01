@@ -11,7 +11,10 @@ loadEnvFile();
 
 const config = {
   port: parseInteger(process.env.LABEL_AGENT_PORT, 4786),
-  token: process.env.LABEL_AGENT_TOKEN?.trim() || "",
+  token:
+    process.env.LABEL_AGENT_TOKEN?.trim() ||
+    process.env.LABEL_PRINTER_AGENT_TOKEN?.trim() ||
+    "",
   printerName: process.env.LABEL_PRINTER_NAME?.trim() || undefined,
   dpi: parseInteger(process.env.LABEL_DPI, 203),
   dataDir: path.resolve(process.env.LABEL_DATA_DIR || path.join(__dirname, "..", "data")),

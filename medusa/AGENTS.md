@@ -189,8 +189,9 @@ Medusa submits BayBlaze delivery labels from an `order.placed` subscriber at
   array before rendering and printing.
 - `LABEL_PRINTER_AGENT_URL` should point to the reachable label agent from the
   Medusa container. Local Docker defaults to `http://host.docker.internal:4786`.
-- If the label agent is protected, set `LABEL_PRINTER_AGENT_TOKEN` in Medusa and
-  `LABEL_AGENT_TOKEN` in the label-printer agent to the same value.
+- If the label agent is protected, set `LABEL_PRINTER_AGENT_TOKEN` in Medusa.
+  The label-printer agent accepts `LABEL_AGENT_TOKEN` or
+  `LABEL_PRINTER_AGENT_TOKEN`; the configured value must match Medusa.
 - Label printing must never block order placement. The subscriber should catch
   and log print failures instead of throwing them back into checkout.
 - The label address should include Medusa `shipping_address.address_2` when
