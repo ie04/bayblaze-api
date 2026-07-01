@@ -26,6 +26,7 @@ services:
       - .env.production
     environment:
       BAYBLAZE_INVENTORY_IMAGE_UPLOAD_DIR: ${BAYBLAZE_INVENTORY_IMAGE_UPLOAD_DIR:-/app/uploads/bayblaze-inventory}
+      PORT: "9000"
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     depends_on:
       postgres:

@@ -130,6 +130,11 @@ exists, builds both API and embedded Medusa images from
 `/opt/bayblaze/bayblaze-api`, runs Medusa migrations, and recreates the
 integrated runtime.
 
+The unified `.env.production` contains `PORT=3040` for `bayblaze-api`.
+`docker-compose.prod.yml` must override the embedded `medusa` service with
+`PORT=9000`; otherwise Medusa starts on the API port and API-to-Medusa calls to
+`http://medusa:9000` fail with `ECONNREFUSED`.
+
 API-to-Medusa service auth should use one canonical secret:
 
 ```env
