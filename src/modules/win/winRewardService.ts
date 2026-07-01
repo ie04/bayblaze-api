@@ -127,7 +127,7 @@ export async function getCustomerWinFreebies() {
     .filter((product) => product.status === "published")
     .filter(hasOnVehicleInventory)
     .map(toFreebieProduct)
-    .filter((product): product is FreebieProduct => Boolean(product))
+    .filter(isFreebieProduct)
     .slice(0, maxFreebieProducts);
 
   return { products };
@@ -275,7 +275,7 @@ async function fetchInventorySnapshot() {
   }
 }
 
-function toFreebieProduct(product: InventoryProduct) {
+function toFreebieProduct(product: InventoryProduct): FreebieProduct | null {
   const variant = product.variants?.find(isAvailableOnVehicleVariant) ?? product.variants?.[0];
   const id = readString(product.id);
   const variantId = readString(variant?.id);
@@ -294,6 +294,10 @@ function toFreebieProduct(product: InventoryProduct) {
     categories: [readString(product.category) || readString(product.collectionTitle) || "Vapes"],
     description: readString(product.description) || "BayBlaze freebie eligible for local Tampa delivery.",
   };
+}
+
+function isFreebieProduct(product: FreebieProduct | null): product is FreebieProduct {
+  return product !== null;
 }
 
 function hasOnVehicleInventory(product: InventoryProduct) {
