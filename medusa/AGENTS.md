@@ -4,11 +4,18 @@
 
 This Medusa service is embedded under `bayblaze-api/medusa`. The `bayblaze-api`
 repository is the repo of record for BayBlaze Medusa code, routes, Docker
-Compose, deployment notes, and future migrations.
+Compose, deployment notes, runtime ownership, and future migrations.
 
 The previous standalone `bayblaze-medusa` repository is retired as an
 independent source repo after the June 2026 consolidation. Make new Medusa
 changes here, not in the old repo.
+
+Production runtime is also consolidated into `bayblaze-api`. The VPS should run
+embedded Medusa from `/opt/bayblaze/bayblaze-api/docker-compose.prod.yml` as
+part of the `bayblaze-api` Compose project. Do not run production Medusa from a
+separate `/opt/bayblaze/medusa` checkout. The consolidated compose reuses the
+old named Docker volumes (`medusa_postgres_data`, `medusa_redis_data`,
+`medusa_caddy_data`, and `medusa_caddy_config`) for data continuity.
 
 ## Durable Project Memory
 
@@ -58,16 +65,18 @@ partitioning, and Google Maps usage guardrails.
   boundaries should call `bayblaze-api` first, while `bayblaze-api` forwards to
   Medusa service routes with backend-only tokens. Existing direct calls may
   remain only as rollout fallbacks.
-- Public `https://api.bayblaze.net/v1/*` traffic is routed by Medusa's Caddy
-  container to the separate `bayblaze-api` container on Docker network
-  `bayblaze-api_default` (`reverse_proxy bayblaze-api:3040`). Keep the Caddy
-  service attached to that external network in both compose files.
+- Public `https://api.bayblaze.net/v1/*` traffic is routed by the consolidated
+  Caddy service in `/opt/bayblaze/bayblaze-api/docker-compose.prod.yml` to the
+  `bayblaze-api` service (`reverse_proxy bayblaze-api:3040`). Non-`/v1`
+  traffic continues to proxy to the embedded `medusa` service
+  (`reverse_proxy medusa:9000`) in the same Compose project.
 - Product photos edited by `bayblaze-inventory` are written to Medusa product
   `thumbnail` and `images`; product media remains Medusa-owned.
-  Inventory-uploaded image bytes are currently stored on the Medusa VPS
-  filesystem under `/opt/bayblaze/medusa/uploads/bayblaze-inventory`, mounted
-  into the container at `/app/uploads`. Keep `uploads/` gitignored and preserve
-  this bind mount in Docker Compose until image storage moves to object storage.
+  Inventory-uploaded image bytes are currently stored on the VPS filesystem
+  under `/opt/bayblaze/bayblaze-api/medusa/uploads/bayblaze-inventory`, mounted
+  into the embedded Medusa container at `/app/uploads`. Keep `uploads/`
+  gitignored and preserve this bind mount in Docker Compose until image storage
+  moves to object storage.
 - Product publish state edited by `bayblaze-inventory` is written to Medusa
   product `status` through the inventory boundary. New products default to
   `draft`; staff publish reviewed products from the inventory product editor.

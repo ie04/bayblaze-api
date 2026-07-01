@@ -1,3 +1,5 @@
+# Local/legacy standalone Medusa compose file.
+# Production runtime is consolidated in ../docker-compose.prod.yml.
 services:
   caddy:
     image: caddy:2-alpine

@@ -23,9 +23,10 @@ services:
     image: bayblaze-medusa:integrated
     restart: unless-stopped
     env_file:
-      - ./medusa/.env.production
+      - .env.production
     environment:
       BAYBLAZE_INVENTORY_IMAGE_UPLOAD_DIR: ${BAYBLAZE_INVENTORY_IMAGE_UPLOAD_DIR:-/app/uploads/bayblaze-inventory}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     depends_on:
       postgres:
         condition: service_healthy
@@ -40,12 +41,12 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     env_file:
-      - ./medusa/.env.production
+      - .env.production
     environment:
-      POSTGRES_DB: medusa
-      POSTGRES_USER: medusa
+      POSTGRES_DB: ${POSTGRES_DB:-medusa}
+      POSTGRES_USER: ${POSTGRES_USER:-medusa}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U medusa -d medusa"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-medusa} -d $${POSTGRES_DB:-medusa}"]
       interval: 10s
       timeout: 5s
       retries: 5

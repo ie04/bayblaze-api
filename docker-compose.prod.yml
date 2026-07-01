@@ -1,4 +1,21 @@
 services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: bayblaze-caddy
+    restart: unless-stopped
+    depends_on:
+      bayblaze-api:
+        condition: service_started
+      medusa:
+        condition: service_started
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./medusa/deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
   bayblaze-api:
     build:
       context: .
@@ -7,7 +24,12 @@ services:
     container_name: bayblaze-api
     restart: unless-stopped
     env_file:
-      - /opt/bayblaze/bayblaze-api/.env.production
+      - .env.production
+    environment:
+      MEDUSA_BACKEND_URL: ${MEDUSA_BACKEND_URL:-http://medusa:9000}
+    depends_on:
+      medusa:
+        condition: service_started
     ports:
       - "127.0.0.1:3040:3040"
     volumes:
@@ -18,3 +40,59 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+
+  medusa:
+    build:
+      context: ./medusa
+    image: bayblaze-medusa:integrated
+    container_name: bayblaze-medusa
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      BAYBLAZE_INVENTORY_IMAGE_UPLOAD_DIR: ${BAYBLAZE_INVENTORY_IMAGE_UPLOAD_DIR:-/app/uploads/bayblaze-inventory}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    expose:
+      - "9000"
+    volumes:
+      - /opt/bayblaze/bayblaze-api/medusa/uploads:/app/uploads
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: bayblaze-medusa-postgres
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-medusa}
+      POSTGRES_USER: ${POSTGRES_USER:-medusa}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-medusa} -d $${POSTGRES_DB:-medusa}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: bayblaze-medusa-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+
+volumes:
+  caddy_data:
+    name: medusa_caddy_data
+  caddy_config:
+    name: medusa_caddy_config
+  postgres_data:
+    name: medusa_postgres_data
+  redis_data:
+    name: medusa_redis_data

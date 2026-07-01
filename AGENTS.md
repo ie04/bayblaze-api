@@ -95,7 +95,7 @@ bayblaze-isochronos-console
 Medusa / Firebase / Google Maps / Twilio / Storage
 ```
 
-## June 2026 Medusa Repo Consolidation
+## June 2026 Medusa Repo And Runtime Consolidation
 
 `bayblaze-medusa` has been copied into this repository at `medusa/`, making
 `bayblaze-api` the repo of record for both the app-facing API and the Medusa
@@ -114,18 +114,21 @@ npm run build:all
 
 The embedded Medusa service keeps its original package/workspace shape under
 `medusa/`, including `medusa/apps/backend`, `medusa/apps/label-printer-agent`,
-Medusa Dockerfiles, and Medusa compose files. The root API Dockerfile excludes
-`medusa/` so the API image stays small; use `docker-compose.integrated.yml` or
-the Medusa compose files under `medusa/` when deploying both services from this
-repo.
+and the Medusa Dockerfile. Production runtime is now consolidated under the
+`bayblaze-api` deployment: `/opt/bayblaze/bayblaze-api/docker-compose.prod.yml`
+owns Caddy, `bayblaze-api`, embedded `medusa`, Postgres, and Redis in the
+single `bayblaze-api` Compose project. Do not deploy or update Medusa from the
+retired `/opt/bayblaze/medusa` checkout or the old standalone
+`bayblaze-medusa` repo.
 
-Current production deployment caveat: `.github/workflows/deploy.yml` deploys
-only the `bayblaze-api` container from `/opt/bayblaze/bayblaze-api`; it does
-not rebuild the embedded Medusa service under `/opt/bayblaze/medusa`. Until a
-Medusa deploy workflow is restored in this repo, production Medusa changes need
-an explicit sync of `bayblaze-api/medusa/` to `/opt/bayblaze/medusa` followed
-by `docker compose -f docker-compose.yml build medusa` and
-`docker compose -f docker-compose.yml up -d --remove-orphans` on the VPS.
+The consolidated production compose intentionally reuses the old Docker volume
+names (`medusa_postgres_data`, `medusa_redis_data`, `medusa_caddy_data`, and
+`medusa_caddy_config`) so the runtime can move into the `bayblaze-api` project
+without losing database, Redis, or Caddy state. The deploy workflow stops the
+legacy standalone Medusa compose project if `/opt/bayblaze/medusa` still
+exists, builds both API and embedded Medusa images from
+`/opt/bayblaze/bayblaze-api`, runs Medusa migrations, and recreates the
+integrated runtime.
 
 API-to-Medusa service auth should use one canonical secret:
 
@@ -133,7 +136,8 @@ API-to-Medusa service auth should use one canonical secret:
 BAYBLAZE_MEDUSA_SERVICE_TOKEN=<shared API-to-Medusa secret>
 ```
 
-Set the same value for `bayblaze-api` and the embedded `medusa` service.
+Set the same value for `bayblaze-api` and the embedded `medusa` service in the
+single `/opt/bayblaze/bayblaze-api/.env.production` file.
 Legacy `BAYBLAZE_INVENTORY_SERVICE_TOKEN`, `BAYBLAZE_DRIVER_SERVICE_TOKEN`, and
 `MEDUSA_ADMIN_API_TOKEN` remain compatibility fallbacks only. Do not introduce
 new app-specific Medusa service token names.
@@ -860,11 +864,14 @@ Use stable Docker Compose project/service names in production.
 
 Production deploys must sync the checked-out release into the stable service
 directory `/opt/bayblaze/bayblaze-api` and run Docker Compose from that
-directory. The GitHub runner workspace under
+directory. This one Compose project owns the app-facing API plus embedded
+Medusa/Caddy/Postgres/Redis runtime. The GitHub runner workspace under
 `/home/codex-deploy/github-runners/bayblaze-api/_work/...` is transient and
 must not be the long-lived Compose working directory. Keep
 `/opt/bayblaze/bayblaze-api/.env.production` and
-`/opt/bayblaze/bayblaze-api/uploads` out of rsync deletion.
+`/opt/bayblaze/bayblaze-api/uploads` out of rsync deletion. Also preserve
+`/opt/bayblaze/bayblaze-api/medusa/uploads`; this is the embedded Medusa upload
+bind mount.
 
 If Dockerized, production should load `.env.production` and explicitly pass critical env vars when ambiguity is risky.
 
@@ -877,6 +884,10 @@ BAYBLAZE_PUBLIC_API_URL=https://api.bayblaze.net
 
 MEDUSA_BACKEND_URL=http://medusa:9000
 BAYBLAZE_MEDUSA_SERVICE_TOKEN=...
+DATABASE_URL=postgres://medusa:<POSTGRES_PASSWORD>@postgres:5432/medusa?sslmode=disable
+POSTGRES_PASSWORD=...
+JWT_SECRET=...
+COOKIE_SECRET=...
 MEDUSA_DRIVER_QUEUE_PATH=/admin/bayblaze/driver-queues/{uid}
 MEDUSA_DELIVERY_ATTEMPT_PATH=/admin/bayblaze/delivery-attempts
 MEDUSA_REPRINT_LABELS_PATH=/admin/bayblaze/orders/{orderId}/reprint-labels

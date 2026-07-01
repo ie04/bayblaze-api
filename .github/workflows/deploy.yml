@@ -27,9 +27,40 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Backfill unified env from legacy Medusa env
+        run: |
+          test -f "$DEPLOY_DIR/.env.production"
+
+          LEGACY_ENV=""
+          for candidate in /opt/bayblaze/medusa/.env.production /opt/bayblaze/medusa/.env; do
+            if [ -f "$candidate" ]; then
+              LEGACY_ENV="$candidate"
+              break
+            fi
+          done
+
+          if [ -n "$LEGACY_ENV" ]; then
+            while IFS= read -r line; do
+              case "$line" in
+                ""|\#*) continue ;;
+                *=*)
+                  key="${line%%=*}"
+                  if ! grep -q "^${key}=" "$DEPLOY_DIR/.env.production"; then
+                    printf '\n%s\n' "$line" >> "$DEPLOY_DIR/.env.production"
+                  fi
+                  ;;
+              esac
+            done < "$LEGACY_ENV"
+          fi
+
       - name: Verify production env exists
         run: |
           test -f "$DEPLOY_DIR/.env.production"
+          grep -q '^DATABASE_URL=' "$DEPLOY_DIR/.env.production"
+          grep -q '^POSTGRES_PASSWORD=' "$DEPLOY_DIR/.env.production"
+          grep -q '^JWT_SECRET=' "$DEPLOY_DIR/.env.production"
+          grep -q '^COOKIE_SECRET=' "$DEPLOY_DIR/.env.production"
+          grep -q '^BAYBLAZE_MEDUSA_SERVICE_TOKEN=' "$DEPLOY_DIR/.env.production"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -53,12 +84,33 @@ jobs:
             ./ "$DEPLOY_DIR"/
           rm -rf "$DEPLOY_DIR/dist" "$DEPLOY_DIR/node_modules"
 
-      - name: Build Docker image
+      - name: Prepare consolidated runtime state
+        run: |
+          mkdir -p "$DEPLOY_DIR/uploads" "$DEPLOY_DIR/medusa/uploads"
+          if [ -d /opt/bayblaze/medusa/uploads ] && [ ! -e "$DEPLOY_DIR/medusa/uploads/.consolidated-from-legacy" ]; then
+            rsync -a /opt/bayblaze/medusa/uploads/ "$DEPLOY_DIR/medusa/uploads"/
+            touch "$DEPLOY_DIR/medusa/uploads/.consolidated-from-legacy"
+          fi
+
+      - name: Retire legacy standalone Medusa runtime
+        run: |
+          if [ -d /opt/bayblaze/medusa ]; then
+            cd /opt/bayblaze/medusa
+            docker compose -f docker-compose.prod.yml down --remove-orphans || \
+              docker compose -f docker-compose.yml down --remove-orphans || true
+          fi
+
+      - name: Build Docker images
         working-directory: ${{ env.DEPLOY_DIR }}
         run: |
           docker compose -p bayblaze-api -f docker-compose.prod.yml build
 
-      - name: Recreate BayBlaze API container
+      - name: Run Medusa migrations
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: |
+          docker compose -p bayblaze-api -f docker-compose.prod.yml run --rm medusa npx medusa db:migrate
+
+      - name: Recreate BayBlaze API runtime
         working-directory: ${{ env.DEPLOY_DIR }}
         run: |
           docker compose -p bayblaze-api -f docker-compose.prod.yml up -d --remove-orphans
@@ -68,3 +120,4 @@ jobs:
         run: |
           docker compose -p bayblaze-api -f docker-compose.prod.yml ps
           docker compose -p bayblaze-api -f docker-compose.prod.yml logs --tail=120 bayblaze-api
+          docker compose -p bayblaze-api -f docker-compose.prod.yml logs --tail=120 medusa

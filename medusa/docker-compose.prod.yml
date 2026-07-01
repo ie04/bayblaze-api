@@ -1,3 +1,6 @@
+# Legacy standalone Medusa compose file.
+# Production runtime is consolidated in ../docker-compose.prod.yml.
+# Do not deploy BayBlaze production Medusa from /opt/bayblaze/medusa.
 services:
   caddy:
     image: caddy:2-alpine
