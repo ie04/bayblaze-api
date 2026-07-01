@@ -25,7 +25,7 @@ export type WinRewardRecord = {
 
 export type FreebieProduct = {
   id: string;
-  variantId?: string;
+  variantId: string;
   name: string;
   brand: string;
   image: string;
