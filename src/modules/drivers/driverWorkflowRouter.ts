@@ -15,7 +15,7 @@ import {
   clockInDriver,
   clockOutDriver,
   deleteDriverNotificationToken,
-  getDriverDeliveryQueue,
+  getDriverDeliveryQueueForClient,
   getDriverProfile,
   linkVehicleToDriver,
   listAvailableVehicles,
@@ -24,6 +24,7 @@ import {
   reprintDriverDeliveryLabels,
   saveDriverProfile,
   syncDriverDeliveryQueue,
+  toClientDriverDeliveryQueue,
   writeDriverLocationSnapshot,
 } from "./driverWorkflowService";
 
@@ -175,7 +176,7 @@ export function createDriverWorkflowRouter() {
 
   router.get("/driver/me/queue", async (req: DriverAuthedRequest, res, next) => {
     try {
-      res.json({ queue: await getDriverDeliveryQueue(readUid(req)) });
+      res.json({ queue: await getDriverDeliveryQueueForClient(readUid(req)) });
     } catch (caught) {
       next(caught);
     }
@@ -184,7 +185,7 @@ export function createDriverWorkflowRouter() {
   router.post("/driver/me/queue/sync", async (req: DriverAuthedRequest, res, next) => {
     try {
       const queue = await syncDriverDeliveryQueue(readUid(req));
-      res.json({ queue, stopCount: queue.stops.length });
+      res.json({ queue: toClientDriverDeliveryQueue(queue), stopCount: queue.stops.length });
     } catch (caught) {
       next(caught);
     }

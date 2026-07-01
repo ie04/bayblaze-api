@@ -572,6 +572,12 @@ label and invoice jobs from order data and submits them to the existing label
 printer agent with `forceReprint: true`, which bypasses the agent's normal
 already-printed dedupe only for explicit reprint jobs.
 
+Driver-facing queue responses from `/v1/driver/me/queue` and
+`/v1/driver/me/queue/sync` must be sanitized BayBlaze workflow DTOs. Do not
+return Medusa/internal commerce identifiers such as `medusaOrderId` or
+`orderReference` to the driver PWA; translate the public `orderId` to internal
+IDs only inside `bayblaze-api`.
+
 ## Variant and inventory contract
 
 Every sellable unit must be represented at the variant level.

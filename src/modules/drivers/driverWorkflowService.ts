@@ -170,6 +170,10 @@ export async function getDriverDeliveryQueue(uid: string) {
   return snapshot.exists ? (snapshot.data() as DriverDeliveryQueue) : null;
 }
 
+export async function getDriverDeliveryQueueForClient(uid: string) {
+  return toClientDriverDeliveryQueue(await getDriverDeliveryQueue(uid));
+}
+
 export async function reprintDriverDeliveryLabels(uid: string, orderId: string) {
   const safeOrderId = readString(orderId);
   const queue = await getDriverDeliveryQueue(uid);
@@ -192,6 +196,25 @@ export async function reprintDriverDeliveryLabels(uid: string, orderId: string) 
     uid,
   });
   await readJsonResponse(upstream, "Medusa label reprint");
+}
+
+export function toClientDriverDeliveryQueue(queue: DriverDeliveryQueue | null) {
+  if (!queue) {
+    return null;
+  }
+
+  return {
+    ...queue,
+    stops: queue.stops.map((stop) => {
+      const {
+        medusaOrderId: _medusaOrderId,
+        orderReference: _orderReference,
+        ...clientStop
+      } = stop;
+
+      return clientStop;
+    }),
+  };
 }
 
 export async function writeDriverLocationSnapshot(uid: string, snapshot: Omit<DriverLocationSnapshot, "uid">) {
