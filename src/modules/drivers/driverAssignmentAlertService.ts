@@ -149,7 +149,7 @@ function renderPushBody(stop: DriverDeliveryStop) {
 }
 
 function formatOrderLabel(stop: DriverDeliveryStop) {
-  return stop.orderReference || stop.medusaOrderId || stop.orderId;
+  return stop.orderId;
 }
 
 function escapeHtml(value: string) {
