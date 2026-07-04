@@ -33,6 +33,11 @@ type ClaimFreebieInput = {
   variantId?: string;
 };
 
+type PreviewCustomerDiscountCodeInput = {
+  code: string;
+  subtotalCents?: number;
+};
+
 type InventorySnapshot = {
   products?: InventoryProduct[];
 };
@@ -194,6 +199,78 @@ export async function claimCustomerWinFreebie(uid: string, input: ClaimFreebieIn
     productId: freebie.id,
     status: "claimed",
     variantId: freebie.variantId,
+  };
+}
+
+export async function previewCustomerDiscountCode(
+  uid: string,
+  input: PreviewCustomerDiscountCodeInput,
+) {
+  const code = normalizeReferralCode(input.code);
+  const subtotalCents = normalizeMoneyCents(input.subtotalCents);
+
+  if (!code) {
+    throw new ApiRequestError(400, "Promo code is required.");
+  }
+
+  const snapshot = await getBayblazeFirestore()
+    .collection(discountCodesCollection)
+    .doc(code)
+    .get();
+
+  if (!snapshot.exists) {
+    throw new ApiRequestError(404, "That promo code was not found.");
+  }
+
+  const discountCode = snapshot.data() ?? {};
+  const category = readString(discountCode.category);
+  const ownerUid = readString(discountCode.ownerUid) || readString(discountCode.uid);
+  const storedCode = normalizeReferralCode(discountCode.code) || code;
+  const storedUsageLimit = readInteger(discountCode.usageLimit) || usageLimit;
+  const usedCount = readInteger(discountCode.usedCount);
+  const storedDiscountPercent = readNumber(discountCode.discountPercent);
+  const storedMinimumSpendCents = readInteger(discountCode.minimumSpendCents);
+  const status = readString(discountCode.status) || "active";
+
+  if (category !== discountCodeCategory) {
+    throw new ApiRequestError(409, "That promo code is not available for checkout.");
+  }
+
+  if (ownerUid && ownerUid === uid) {
+    throw new ApiRequestError(409, "Send this friend code to someone else to unlock your freebie.");
+  }
+
+  if (status === "used" || usedCount >= storedUsageLimit) {
+    throw new ApiRequestError(409, "That promo code has already been used.");
+  }
+
+  if (storedDiscountPercent <= 0) {
+    throw new ApiRequestError(409, "That promo code is not configured correctly.");
+  }
+
+  if (subtotalCents > 0 && storedMinimumSpendCents > subtotalCents) {
+    throw new ApiRequestError(
+      409,
+      `That promo code requires at least ${formatCents(storedMinimumSpendCents)} in products.`,
+    );
+  }
+
+  const discountAmountCents =
+    subtotalCents > 0
+      ? Math.min(subtotalCents, Math.round(subtotalCents * (storedDiscountPercent / 100)))
+      : 0;
+
+  return {
+    category,
+    code: storedCode,
+    discountAmountCents,
+    discountPercent: storedDiscountPercent,
+    eligible: true,
+    minimumSpendCents: storedMinimumSpendCents,
+    ownerUid,
+    subtotalCents,
+    usageLimit: storedUsageLimit,
+    usedCount,
   };
 }
 
@@ -466,6 +543,31 @@ function serializeTimestamp(value: unknown) {
 
 function readString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function readInteger(value: unknown) {
+  const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+
+  return Number.isInteger(number) && number >= 0 ? number : 0;
+}
+
+function readNumber(value: unknown) {
+  const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+
+  return Number.isFinite(number) && number >= 0 ? number : 0;
+}
+
+function normalizeMoneyCents(value: unknown) {
+  const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+
+  return Number.isInteger(number) && number >= 0 ? number : 0;
+}
+
+function formatCents(cents: number) {
+  return new Intl.NumberFormat("en-US", {
+    currency: "USD",
+    style: "currency",
+  }).format(cents / 100);
 }
 
 function removeUndefinedValues<T extends Record<string, unknown>>(value: T) {

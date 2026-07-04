@@ -9,6 +9,7 @@ import {
   claimCustomerWinFreebie,
   getCustomerWinFreebies,
   getCustomerWinRewardStatus,
+  previewCustomerDiscountCode,
   startCustomerWinReward,
 } from "./winRewardService";
 
@@ -32,6 +33,11 @@ const completionSchema = z.object({
   customerId: z.string().optional(),
   orderId: z.string().optional(),
   referralCode: z.string().min(1),
+});
+
+const discountPreviewSchema = z.object({
+  code: z.string().min(1),
+  subtotalCents: z.number().int().nonnegative().optional(),
 });
 
 export function createWinRewardRouter() {
@@ -96,6 +102,22 @@ export function createWinRewardRouter() {
       next(caught);
     }
   });
+
+  router.post(
+    "/customer/discount-codes/preview",
+    requireAccountAuth,
+    requireCustomerBadge,
+    async (req: AccountAuthedRequest, res, next) => {
+      try {
+        const uid = readRequiredUid(req);
+        const parsed = discountPreviewSchema.parse(req.body ?? {});
+
+        res.json(await previewCustomerDiscountCode(uid, parsed));
+      } catch (caught) {
+        next(caught);
+      }
+    },
+  );
 
   router.use((err: unknown, _req: AccountAuthedRequest, res: Response, next: NextFunction) => {
     if (err instanceof z.ZodError) {
