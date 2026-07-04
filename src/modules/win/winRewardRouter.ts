@@ -10,6 +10,7 @@ import {
   getCustomerWinFreebies,
   getCustomerWinRewardStatus,
   previewCustomerDiscountCode,
+  previewPublicDiscountCode,
   startCustomerWinReward,
 } from "./winRewardService";
 
@@ -47,6 +48,16 @@ export function createWinRewardRouter() {
     try {
       const parsed = completionSchema.parse(req.body ?? {});
       res.json(await completeWinReferral(parsed));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/discount-codes/preview", async (req, res, next) => {
+    try {
+      const parsed = discountPreviewSchema.parse(req.body ?? {});
+
+      res.json(await previewPublicDiscountCode(parsed));
     } catch (caught) {
       next(caught);
     }

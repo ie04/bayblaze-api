@@ -276,10 +276,12 @@ a Firestore transaction, mark the code used, tie it to the qualifying order, and
 reject any later order for the same code. Do not rely on a storefront-only or
 Medusa-only discount code as the source of truth for one-time win reward
 qualification.
-Customer checkout promo previews go through authenticated
-`POST /v1/customer/discount-codes/preview`. The route requires the `customer`
-badge, validates account-bound promo ownership, one-time usage, and minimum
-spend, then returns display-safe discount math for storefront checkout.
+Customer checkout promo savings can be previewed without sign-in through
+`POST /v1/discount-codes/preview`, which validates code existence, status,
+one-time usage, and minimum spend without exposing owner identity. Final
+checkout lock-in goes through authenticated
+`POST /v1/customer/discount-codes/preview`; that route requires the `customer`
+badge and also validates account-bound promo ownership.
 
 Google OAuth must be centralized through `bayblaze-api`: the API signs OAuth
 state, exchanges Google authorization codes, verifies the Google ID token,

@@ -206,6 +206,22 @@ export async function previewCustomerDiscountCode(
   uid: string,
   input: PreviewCustomerDiscountCodeInput,
 ) {
+  const preview = await previewDiscountCode(input);
+
+  if (preview.ownerUid && preview.ownerUid === uid) {
+    throw new ApiRequestError(409, "Send this friend code to someone else to unlock your freebie.");
+  }
+
+  return preview;
+}
+
+export async function previewPublicDiscountCode(input: PreviewCustomerDiscountCodeInput) {
+  const { ownerUid: _ownerUid, ...preview } = await previewDiscountCode(input);
+
+  return preview;
+}
+
+async function previewDiscountCode(input: PreviewCustomerDiscountCodeInput) {
   const code = normalizeReferralCode(input.code);
   const subtotalCents = normalizeMoneyCents(input.subtotalCents);
 
@@ -234,10 +250,6 @@ export async function previewCustomerDiscountCode(
 
   if (category !== discountCodeCategory) {
     throw new ApiRequestError(409, "That promo code is not available for checkout.");
-  }
-
-  if (ownerUid && ownerUid === uid) {
-    throw new ApiRequestError(409, "Send this friend code to someone else to unlock your freebie.");
   }
 
   if (status === "used" || usedCount >= storedUsageLimit) {
