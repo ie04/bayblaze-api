@@ -1,7 +1,10 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 import { getBayblazeAuth } from "../../clients/firebaseAdminClient";
-import { createMedusaCustomerSession } from "../../clients/medusaCustomerSessionClient";
+import {
+  createMedusaCustomerSession,
+  MedusaCustomerSessionError,
+} from "../../clients/medusaCustomerSessionClient";
 import { env } from "../../config/env";
 import { ApiRequestError } from "../drivers/driverWorkflowService";
 import {
@@ -115,9 +118,36 @@ export async function completeGoogleOAuth(input: {
             caught,
           );
 
+          if (
+            caught instanceof
+            MedusaCustomerSessionError
+          ) {
+            if (caught.status === 404) {
+              throw new ApiRequestError(
+                502,
+                "The Medusa customer-session route is not deployed.",
+              );
+            }
+
+            if (
+              caught.status === 401 ||
+              caught.status === 403
+            ) {
+              throw new ApiRequestError(
+                502,
+                "Medusa rejected the BayBlaze service credentials.",
+              );
+            }
+
+            throw new ApiRequestError(
+              502,
+              `Storefront session creation failed: ${caught.message}`,
+            );
+          }
+
           throw new ApiRequestError(
             502,
-            "Google sign-in succeeded, but the storefront customer session could not be created.",
+            "Google sign-in succeeded, but Medusa could not create the storefront session.",
           );
         })
       : null;

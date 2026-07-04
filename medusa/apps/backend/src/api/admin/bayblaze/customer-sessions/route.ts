@@ -1,14 +1,35 @@
-import { createCustomerAccountWorkflow, setAuthAppMetadataWorkflow } from "@medusajs/core-flows";
-import { MedusaRequest, MedusaResponse } from "@medusajs/framework/http";
+import type {
+  MedusaRequest,
+  MedusaResponse,
+} from "@medusajs/framework/http";
 import {
   ContainerRegistrationKeys,
   Modules,
   generateJwtToken,
 } from "@medusajs/framework/utils";
+import {
+  createCustomerAccountWorkflow,
+  setAuthAppMetadataWorkflow,
+} from "@medusajs/medusa/core-flows";
 
 import { assertBayblazeServiceToken } from "../../../../lib/bayblaze-service-auth";
 
 export const AUTHENTICATE = false;
+
+type AuthIdentity = {
+  app_metadata?: Record<string, unknown> | null;
+  id: string;
+  provider_identities?: ProviderIdentity[];
+};
+
+type ProviderIdentity = {
+  auth_identity?: AuthIdentity;
+  auth_identity_id?: string;
+  entity_id?: string;
+  provider?: string;
+  provider_metadata?: Record<string, unknown> | null;
+  user_metadata?: Record<string, unknown> | null;
+};
 
 type AuthModule = {
   createAuthIdentities: (data: {
@@ -19,29 +40,31 @@ type AuthModule = {
       user_metadata?: Record<string, unknown>;
     }>;
   }) => Promise<AuthIdentity>;
-  listAuthIdentities: (
-    filters: Record<string, unknown>,
-    config?: Record<string, unknown>,
-  ) => Promise<AuthIdentity[]>;
+
+  listProviderIdentities: (
+    filters: {
+      entity_id?: string;
+      provider?: string;
+    },
+    config?: {
+      relations?: string[];
+    },
+  ) => Promise<ProviderIdentity[]>;
+
+  retrieveAuthIdentity: (
+    id: string,
+    config?: {
+      relations?: string[];
+    },
+  ) => Promise<AuthIdentity>;
 };
 
-type AuthIdentity = {
-  app_metadata?: Record<string, unknown> | null;
-  id: string;
-  provider_identities?: Array<{
-    entity_id?: string;
-    provider?: string;
-    provider_metadata?: Record<string, unknown> | null;
-    user_metadata?: Record<string, unknown> | null;
-  }>;
-};
-
-type Query = {
-  graph: <T = unknown>(input: {
-    entity: string;
-    fields: string[];
-    filters?: Record<string, unknown>;
-  }) => Promise<{ data: T[] }>;
+type CustomerModule = {
+  listCustomers: (
+    filters: {
+      email?: string;
+    },
+  ) => Promise<BayblazeCustomer[]>;
 };
 
 type BayblazeCustomer = {
@@ -59,41 +82,84 @@ type CustomerSessionBody = {
   metadata?: unknown;
 };
 
+const authProvider = "bayblaze_google";
 const tokenTtl = "30d";
 
-export async function POST(req: MedusaRequest<CustomerSessionBody>, res: MedusaResponse) {
+export async function POST(
+  req: MedusaRequest<CustomerSessionBody>,
+  res: MedusaResponse,
+) {
   if (!assertBayblazeServiceToken(req, res)) {
     return;
   }
 
-  const email = readEmail(req.body?.email);
-  const googleSubject = readString(req.body?.google_subject) || email;
-  const firstName = readString(req.body?.first_name) || "BayBlaze";
-  const lastName = readString(req.body?.last_name) || "Customer";
-  const metadata = readMetadata(req.body?.metadata);
-  const authIdentity = await ensureAuthIdentity(req, {
-    email,
-    firstName,
-    googleSubject,
-    lastName,
-  });
-  const customer = await ensureCustomer(req, {
-    authIdentityId: authIdentity.id,
-    email,
-    firstName,
-    lastName,
-    metadata,
-  });
-  const token = createCustomerToken(req, {
-    authIdentity,
-    customer,
-    email,
-  });
+  try {
+    const email = readEmail(req.body?.email);
+    const googleSubject =
+      readString(req.body?.google_subject) ||
+      email;
 
-  return res.status(200).json({
-    customer,
-    token,
-  });
+    const firstName =
+      readString(req.body?.first_name) ||
+      "BayBlaze";
+
+    const lastName =
+      readString(req.body?.last_name) ||
+      "Customer";
+
+    const metadata =
+      readMetadata(req.body?.metadata);
+
+    let authIdentity =
+      await ensureAuthIdentity(req, {
+        email,
+        firstName,
+        googleSubject,
+        lastName,
+      });
+
+    const customer = await ensureCustomer(req, {
+      authIdentityId: authIdentity.id,
+      email,
+      firstName,
+      lastName,
+      metadata,
+    });
+
+    /*
+     * createCustomerAccountWorkflow and
+     * setAuthAppMetadataWorkflow update the stored identity, but the
+     * object returned before those workflows is stale. Retrieve it
+     * again so app_metadata and provider identities are current.
+     */
+    authIdentity =
+      await retrieveAuthIdentity(
+        req,
+        authIdentity.id,
+      );
+
+    const token = createCustomerToken(req, {
+      authIdentity,
+      customer,
+      email,
+    });
+
+    return res.status(200).json({
+      customer,
+      token,
+    });
+  } catch (caught) {
+    console.error(
+      "[BayBlaze] Medusa customer-session creation failed:",
+      caught,
+    );
+
+    return res.status(
+      getErrorStatus(caught),
+    ).json({
+      message: getErrorMessage(caught),
+    });
+  }
 }
 
 async function ensureAuthIdentity(
@@ -105,28 +171,46 @@ async function ensureAuthIdentity(
     lastName: string;
   },
 ) {
-  const authModule = req.scope.resolve<AuthModule>(Modules.AUTH);
-  const [existing] = await authModule.listAuthIdentities(
-    {
-      provider_identities: {
-        entity_id: input.googleSubject,
-        provider: "bayblaze_google",
-      },
-    },
-    {
-      relations: ["provider_identities"],
-    },
-  );
+  const authModule =
+    req.scope.resolve<AuthModule>(
+      Modules.AUTH,
+    );
 
-  if (existing) {
-    return existing;
+  /*
+   * Query provider identities directly rather than applying a
+   * relation filter through listAuthIdentities. This is simpler and
+   * avoids relation-filter differences between Medusa versions.
+   */
+  const [providerIdentity] =
+    await authModule.listProviderIdentities(
+      {
+        entity_id: input.googleSubject,
+        provider: authProvider,
+      },
+      {
+        relations: [
+          "auth_identity",
+          "auth_identity.provider_identities",
+        ],
+      },
+    );
+
+  if (providerIdentity?.auth_identity) {
+    return providerIdentity.auth_identity;
+  }
+
+  if (providerIdentity?.auth_identity_id) {
+    return retrieveAuthIdentity(
+      req,
+      providerIdentity.auth_identity_id,
+    );
   }
 
   return authModule.createAuthIdentities({
     provider_identities: [
       {
         entity_id: input.googleSubject,
-        provider: "bayblaze_google",
+        provider: authProvider,
         provider_metadata: {
           email: input.email,
         },
@@ -134,11 +218,33 @@ async function ensureAuthIdentity(
           email: input.email,
           family_name: input.lastName,
           given_name: input.firstName,
-          name: `${input.firstName} ${input.lastName}`.trim(),
+          name: [
+            input.firstName,
+            input.lastName,
+          ]
+            .filter(Boolean)
+            .join(" "),
         },
       },
     ],
   });
+}
+
+async function retrieveAuthIdentity(
+  req: MedusaRequest,
+  authIdentityId: string,
+) {
+  const authModule =
+    req.scope.resolve<AuthModule>(
+      Modules.AUTH,
+    );
+
+  return authModule.retrieveAuthIdentity(
+    authIdentityId,
+    {
+      relations: ["provider_identities"],
+    },
+  );
 }
 
 async function ensureCustomer(
@@ -151,31 +257,69 @@ async function ensureCustomer(
     metadata?: Record<string, unknown>;
   },
 ) {
-  const existing = await findCustomerByEmail(req, input.email);
+  const customerModule =
+    req.scope.resolve<CustomerModule>(
+      Modules.CUSTOMER,
+    );
+
+  const [existing] =
+    await customerModule.listCustomers({
+      email: input.email,
+    });
 
   if (existing) {
-    await setAuthAppMetadataWorkflow(req.scope).run({
-      input: {
-        actorType: "customer",
-        authIdentityId: input.authIdentityId,
-        value: existing.id,
-      },
-    });
+    const authIdentity =
+      await retrieveAuthIdentity(
+        req,
+        input.authIdentityId,
+      );
+
+    const currentCustomerId =
+      readString(
+        authIdentity.app_metadata
+          ?.customer_id,
+      );
+
+    if (
+      currentCustomerId &&
+      currentCustomerId !== existing.id
+    ) {
+      throw new Error(
+        "This Google identity is already linked to another customer.",
+      );
+    }
+
+    if (!currentCustomerId) {
+      await setAuthAppMetadataWorkflow(
+        req.scope,
+      ).run({
+        input: {
+          actorType: "customer",
+          authIdentityId:
+            input.authIdentityId,
+          value: existing.id,
+        },
+      });
+    }
 
     return existing;
   }
 
-  const { result } = await createCustomerAccountWorkflow(req.scope).run({
-    input: {
-      authIdentityId: input.authIdentityId,
-      customerData: {
-        email: input.email,
-        first_name: input.firstName,
-        last_name: input.lastName,
-        metadata: input.metadata,
+  const { result } =
+    await createCustomerAccountWorkflow(
+      req.scope,
+    ).run({
+      input: {
+        authIdentityId:
+          input.authIdentityId,
+        customerData: {
+          email: input.email,
+          first_name: input.firstName,
+          last_name: input.lastName,
+          metadata: input.metadata,
+        },
       },
-    },
-  });
+    });
 
   return {
     email: result.email,
@@ -183,19 +327,6 @@ async function ensureCustomer(
     id: result.id,
     last_name: result.last_name,
   };
-}
-
-async function findCustomerByEmail(req: MedusaRequest, email: string) {
-  const query = req.scope.resolve<Query>(ContainerRegistrationKeys.QUERY);
-  const { data } = await query.graph<BayblazeCustomer>({
-    entity: "customer",
-    fields: ["id", "email", "first_name", "last_name"],
-    filters: {
-      email,
-    },
-  });
-
-  return data[0] ?? null;
 }
 
 function createCustomerToken(
@@ -206,18 +337,33 @@ function createCustomerToken(
     email: string;
   },
 ) {
-  const config = req.scope.resolve(ContainerRegistrationKeys.CONFIG_MODULE);
-  const jwtSecret = config.projectConfig.http.jwtSecret;
+  const config = req.scope.resolve(
+    ContainerRegistrationKeys.CONFIG_MODULE,
+  );
+
+  const httpConfig =
+    config.projectConfig.http;
+
+  if (!httpConfig.jwtSecret) {
+    throw new Error(
+      "Medusa JWT_SECRET is not configured.",
+    );
+  }
 
   return generateJwtToken(
     {
       actor_id: input.customer.id,
       actor_type: "customer",
-      auth_identity_id: input.authIdentity.id,
-      auth_provider: "bayblaze_google",
+      auth_identity_id:
+        input.authIdentity.id,
+      auth_provider: authProvider,
       app_metadata: {
-        ...(input.authIdentity.app_metadata ?? {}),
-        customer_id: input.customer.id,
+        ...(
+          input.authIdentity
+            .app_metadata ?? {}
+        ),
+        customer_id:
+          input.customer.id,
       },
       user_metadata: {
         email: input.email,
@@ -225,27 +371,74 @@ function createCustomerToken(
     },
     {
       expiresIn: tokenTtl,
-      secret: jwtSecret,
+      jwtOptions:
+        httpConfig.jwtOptions,
+      secret: httpConfig.jwtSecret,
     },
   );
 }
 
 function readEmail(value: unknown) {
-  const email = readString(value).toLowerCase();
+  const email =
+    readString(value).toLowerCase();
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw new Error("A valid customer email is required.");
+  if (
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+      email,
+    )
+  ) {
+    throw new Error(
+      "A valid customer email is required.",
+    );
   }
 
   return email;
 }
 
 function readString(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
+  return typeof value === "string"
+    ? value.trim()
+    : "";
 }
 
 function readMetadata(value: unknown) {
-  return value && typeof value === "object" && !Array.isArray(value)
+  return (
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value)
+  )
     ? value as Record<string, unknown>
     : undefined;
+}
+
+function getErrorMessage(value: unknown) {
+  if (
+    value instanceof Error &&
+    value.message
+  ) {
+    return value.message;
+  }
+
+  return "Medusa could not create the customer session.";
+}
+
+function getErrorStatus(value: unknown) {
+  const message =
+    getErrorMessage(value).toLowerCase();
+
+  if (
+    message.includes("already has an account") ||
+    message.includes("duplicate")
+  ) {
+    return 409;
+  }
+
+  if (
+    message.includes("required") ||
+    message.includes("invalid")
+  ) {
+    return 400;
+  }
+
+  return 500;
 }
