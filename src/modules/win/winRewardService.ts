@@ -10,11 +10,14 @@ import type { FreebieProduct, WinRewardRecord, WinRewardStatus } from "./winType
 
 const winRewardsCollection = "customer_win_rewards";
 const referralCodeIndexCollection = "customer_win_referral_codes";
+const discountCodesCollection = "customer_discount_codes";
 const orderCompletionsCollection = "customer_win_order_completions";
 const defaultCampaign = "nfc-free-vape";
 const defaultSource = "nfc-mailer";
+const discountCodeCategory = "win_referral";
 const discountPercent = 20;
 const minimumSpendCents = 2000;
+const usageLimit = 1;
 const maxFreebieProducts = 48;
 
 type WinContext = {
@@ -76,13 +79,17 @@ export async function startCustomerWinReward(uid: string, context: WinContext) {
   const existing = await ref.get();
 
   if (existing.exists) {
-    return serializeReward(await refreshRewardQualification(existing.data() as WinRewardRecord));
+    const reward = existing.data() as WinRewardRecord;
+    await ensureDiscountCodeRecord(reward);
+    return serializeReward(await refreshRewardQualification(reward));
   }
 
   const referralCode = await createUniqueReferralCode(uid, normalizedContext.campaign);
   const now = FieldValue.serverTimestamp();
   const reward: WinRewardRecord = {
     campaign: normalizedContext.campaign,
+    discountCodeCategory,
+    discountCodeId: referralCode,
     discountPercent,
     minimumSpendCents,
     nfcTagId: normalizedContext.nfcTagId,
@@ -94,18 +101,27 @@ export async function startCustomerWinReward(uid: string, context: WinContext) {
     createdAt: now,
     updatedAt: now,
   };
-
-  await ref.set(reward);
-  await getBayblazeFirestore().collection(referralCodeIndexCollection).doc(referralCode).set({
+  const codeRecord = {
     campaign: normalizedContext.campaign,
+    category: discountCodeCategory,
+    code: referralCode,
+    codeType: "discount",
     discountPercent,
     minimumSpendCents,
+    ownerUid: uid,
     referralCode,
     rewardId: ref.id,
+    status: "active",
     uid,
+    usageLimit,
+    usedCount: 0,
     createdAt: now,
     updatedAt: now,
-  });
+  };
+
+  await ref.set(reward);
+  await getBayblazeFirestore().collection(referralCodeIndexCollection).doc(referralCode).set(codeRecord);
+  await getBayblazeFirestore().collection(discountCodesCollection).doc(referralCode).set(codeRecord);
 
   return serializeReward(reward);
 }
@@ -118,7 +134,9 @@ export async function getCustomerWinRewardStatus(uid: string, context: WinContex
     return startCustomerWinReward(uid, normalizedContext);
   }
 
-  return serializeReward(await refreshRewardQualification(snapshot.data() as WinRewardRecord));
+  const reward = snapshot.data() as WinRewardRecord;
+  await ensureDiscountCodeRecord(reward);
+  return serializeReward(await refreshRewardQualification(reward));
 }
 
 export async function getCustomerWinFreebies() {
@@ -232,6 +250,45 @@ async function createUniqueReferralCode(uid: string, campaign: string) {
   throw new ApiRequestError(409, "Could not generate a unique BayBlaze friend code.");
 }
 
+async function ensureDiscountCodeRecord(reward: WinRewardRecord) {
+  const referralCode = normalizeReferralCode(reward.referralCode);
+
+  if (!referralCode) {
+    return;
+  }
+
+  const firestore = getBayblazeFirestore();
+  const discountCodeRef = firestore.collection(discountCodesCollection).doc(referralCode);
+  const discountCodeSnapshot = await discountCodeRef.get();
+
+  if (discountCodeSnapshot.exists) {
+    return;
+  }
+
+  const used = Boolean(reward.completedOrderId) || reward.status === "qualified" || reward.status === "claimed";
+  const codeRecord = removeUndefinedValues({
+    campaign: reward.campaign,
+    category: reward.discountCodeCategory ?? discountCodeCategory,
+    code: referralCode,
+    codeType: "discount",
+    discountPercent: reward.discountPercent,
+    minimumSpendCents: reward.minimumSpendCents,
+    ownerUid: reward.uid,
+    referralCode,
+    rewardId: `${reward.uid}_${reward.campaign}`,
+    status: used ? "used" : "active",
+    uid: reward.uid,
+    usageLimit,
+    usedByOrderId: reward.completedOrderId,
+    usedCount: used ? 1 : 0,
+    createdAt: reward.createdAt ?? FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  await discountCodeRef.set(codeRecord, { merge: true });
+  await firestore.collection(referralCodeIndexCollection).doc(referralCode).set(codeRecord, { merge: true });
+}
+
 function serializeReward(reward: WinRewardRecord) {
   return {
     campaign: reward.campaign,
@@ -239,6 +296,8 @@ function serializeReward(reward: WinRewardRecord) {
     claimedProductId: reward.claimedProductId ?? null,
     claimedVariantId: reward.claimedVariantId ?? null,
     completedOrderId: reward.completedOrderId ?? null,
+    discountCodeCategory: reward.discountCodeCategory ?? discountCodeCategory,
+    discountCodeId: reward.discountCodeId ?? reward.referralCode,
     discountPercent: reward.discountPercent,
     minimumSpendCents: reward.minimumSpendCents,
     nfcTagId: reward.nfcTagId ?? null,
@@ -375,6 +434,13 @@ function normalizeToken(value: unknown) {
     .slice(0, 80);
 }
 
+function normalizeReferralCode(value: unknown) {
+  return readString(value)
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .slice(0, 80)
+    .toUpperCase();
+}
+
 function buildReferralUrl(referralCode: string) {
   const storefrontUrl = (env.BAYBLAZE_STOREFRONT_URL || "https://bayblaze.net").replace(/\/$/, "");
   const params = new URLSearchParams({ promo: referralCode });
@@ -400,4 +466,8 @@ function serializeTimestamp(value: unknown) {
 
 function readString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function removeUndefinedValues<T extends Record<string, unknown>>(value: T) {
+  return Object.fromEntries(Object.entries(value).filter((entry) => entry[1] !== undefined)) as T;
 }

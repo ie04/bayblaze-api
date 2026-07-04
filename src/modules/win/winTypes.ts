@@ -11,6 +11,8 @@ export type WinRewardRecord = {
   claimedVariantId?: string;
   completedOrderId?: string;
   createdAt?: unknown;
+  discountCodeCategory?: "win_referral";
+  discountCodeId?: string;
   discountPercent: number;
   minimumSpendCents: number;
   nfcTagId?: string;

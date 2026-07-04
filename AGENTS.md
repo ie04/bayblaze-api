@@ -267,6 +267,16 @@ session through the API-owned embedded Medusa `/admin/bayblaze/customer-sessions
 bridge and return `commerce.customerToken`; the storefront should not call
 native Medusa email/password registration directly.
 
+BayBlaze Win discount/referral codes are owned by `bayblaze-api`. When a
+customer starts the win flow, the API creates a customer-scoped reward document,
+a win-specific referral index, and a categorized `customer_discount_codes/{code}`
+ledger entry with `category=win_referral`, `ownerUid`, `usageLimit=1`, and
+`usedCount=0`. Completion through `POST /v1/win/referrals/complete` must run in
+a Firestore transaction, mark the code used, tie it to the qualifying order, and
+reject any later order for the same code. Do not rely on a storefront-only or
+Medusa-only discount code as the source of truth for one-time win reward
+qualification.
+
 Google OAuth must be centralized through `bayblaze-api`: the API signs OAuth
 state, exchanges Google authorization codes, verifies the Google ID token,
 creates or finds the Firebase Auth user, ensures an account record, and returns
