@@ -177,7 +177,7 @@ function drawInvoice(doc, invoiceData) {
       invoiceData.customerName,
       invoiceData.customerPhone,
       invoiceData.customerEmail,
-    ].filter(Boolean).join("\\n"),
+    ].filter(Boolean).join("\n"),
     {
       y,
       size: 19,
@@ -186,7 +186,7 @@ function drawInvoice(doc, invoiceData) {
   );
 
   y = drawSectionTitle(doc, "Delivery Address", y + 8);
-  y = drawFlowText(doc, invoiceData.address.join("\\n") || "Address unavailable", {
+  y = drawFlowText(doc, invoiceData.address.join("\n") || "Address unavailable", {
     y,
     size: 19,
     lineHeight: 25,
