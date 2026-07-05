@@ -157,9 +157,11 @@ export async function syncDriverDeliveryQueue(uid: string) {
   await writeDriverQueue(uid, scoredQueue);
 
   if (newStops.length > 0) {
-    void sendDriverAssignmentAlerts(uid, newStops).catch((caught) => {
-      console.warn("Driver assignment alerts failed.", caught);
-    });
+    const alertResult = await sendDriverAssignmentAlerts(uid, newStops);
+
+    if (alertResult.pushCount === 0 && alertResult.tokenCount === 0) {
+      console.warn(`No driver push subscriptions were available for ${uid}.`);
+    }
   }
 
   return scoredQueue;
@@ -394,7 +396,7 @@ function findNewDeliveryStops(
   nextQueue: DriverDeliveryQueue,
 ) {
   if (!existingQueue) {
-    return [];
+    return nextQueue.stops;
   }
 
   const existingOrderIds = new Set(existingQueue.stops.map((stop) => stop.orderId));

@@ -572,7 +572,10 @@ If caching is added, cache must be clearly derived from Medusa and safely refres
 
 Driver assignment alerts are sent by `bayblaze-api` after
 `syncDriverDeliveryQueue` detects stops that were not present in the previous
-materialized queue. Email alerts use `RESEND_API_KEY`, `DRIVER_EMAIL_FROM`, and
+materialized queue, including the first materialized queue when no prior
+`driver_delivery_queues/{uid}` document exists. Queue sync must await alert
+submission so server runtimes do not drop push/email work after responding.
+Email alerts use `RESEND_API_KEY`, `DRIVER_EMAIL_FROM`, and
 `DRIVER_EMAIL_REPLY_TO`. Closed-app browser push uses standard Web Push
 subscriptions stored under `driver_notification_tokens/{uid}/tokens/{tokenId}`
 and VAPID variables `DRIVER_WEB_PUSH_PUBLIC_KEY`,

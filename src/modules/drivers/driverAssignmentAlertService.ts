@@ -13,24 +13,46 @@ type DriverNotificationToken = {
   userAgent?: string;
 };
 
+export type DriverAssignmentAlertResult = {
+  emailCount: number;
+  pushCount: number;
+  tokenCount: number;
+};
+
 let webPushConfigured = false;
 
-export async function sendDriverAssignmentAlerts(uid: string, stops: DriverDeliveryStop[]) {
+export async function sendDriverAssignmentAlerts(
+  uid: string,
+  stops: DriverDeliveryStop[],
+): Promise<DriverAssignmentAlertResult> {
   if (stops.length === 0) {
-    return;
+    return { emailCount: 0, pushCount: 0, tokenCount: 0 };
   }
 
   const profile = await readDriverProfile(uid);
-
-  await Promise.allSettled([
+  const [emailResult, pushResult] = await Promise.allSettled([
     sendDriverAssignmentEmails(profile, stops),
     sendDriverAssignmentPushNotifications(uid, stops),
   ]);
+
+  if (emailResult.status === "rejected") {
+    console.warn("Driver assignment email alerts failed.", emailResult.reason);
+  }
+
+  if (pushResult.status === "rejected") {
+    console.warn("Driver assignment push alerts failed.", pushResult.reason);
+  }
+
+  return {
+    emailCount: emailResult.status === "fulfilled" ? emailResult.value : 0,
+    pushCount: pushResult.status === "fulfilled" ? pushResult.value.pushCount : 0,
+    tokenCount: pushResult.status === "fulfilled" ? pushResult.value.tokenCount : 0,
+  };
 }
 
 async function sendDriverAssignmentEmails(profile: DriverProfile | null, stops: DriverDeliveryStop[]) {
   if (!profile?.email || !env.RESEND_API_KEY || !env.DRIVER_EMAIL_FROM) {
-    return;
+    return 0;
   }
 
   const resend = new Resend(env.RESEND_API_KEY);
@@ -48,11 +70,13 @@ async function sendDriverAssignmentEmails(profile: DriverProfile | null, stops: 
       }),
     ),
   );
+
+  return stops.length;
 }
 
 async function sendDriverAssignmentPushNotifications(uid: string, stops: DriverDeliveryStop[]) {
   if (!configureWebPush()) {
-    return;
+    return { pushCount: 0, tokenCount: 0 };
   }
 
   const snapshot = await getBayblazeFirestore()
@@ -67,6 +91,7 @@ async function sendDriverAssignmentPushNotifications(uid: string, stops: DriverD
       data: doc.data() as DriverNotificationToken,
     }))
     .filter((entry) => entry.data.platform === "web-push" && entry.data.token);
+  let pushCount = 0;
 
   await Promise.all(
     tokens.flatMap((entry) =>
@@ -83,6 +108,7 @@ async function sendDriverAssignmentPushNotifications(uid: string, stops: DriverD
               },
             }),
           );
+          pushCount += 1;
         } catch (caught) {
           if (isExpiredPushSubscription(caught)) {
             await snapshot.docs.find((doc) => doc.id === entry.docId)?.ref.delete();
@@ -93,6 +119,11 @@ async function sendDriverAssignmentPushNotifications(uid: string, stops: DriverD
       }),
     ),
   );
+
+  return {
+    pushCount,
+    tokenCount: tokens.length,
+  };
 }
 
 async function readDriverProfile(uid: string) {
