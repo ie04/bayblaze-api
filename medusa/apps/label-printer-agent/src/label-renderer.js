@@ -220,7 +220,12 @@ function drawInvoice(doc, invoiceData) {
   y = drawDivider(doc, totalsY);
   y = drawInvoiceRow(doc, "Subtotal", formatInvoiceMoney(invoiceData.totals.subtotal, invoiceData.currencyCode), y + 10);
   if (invoiceData.totals.discountTotal > 0) {
-    y = drawInvoiceRow(doc, "Discount", formatInvoiceMoney(-invoiceData.totals.discountTotal, invoiceData.currencyCode), y);
+    y = drawInvoiceRow(
+      doc,
+      invoiceData.totals.discountLabel || "Discount",
+      formatInvoiceMoney(-invoiceData.totals.discountTotal, invoiceData.currencyCode),
+      y,
+    );
   }
   if (invoiceData.totals.shippingTotal > 0) {
     y = drawInvoiceRow(doc, "Delivery", formatInvoiceMoney(invoiceData.totals.shippingTotal, invoiceData.currencyCode), y);
@@ -492,6 +497,7 @@ function normalizeInvoiceJob(job) {
     totals: {
       subtotal: moneyNumber(totals.subtotal),
       discountTotal: moneyNumber(totals.discountTotal),
+      discountLabel: asText(totals.discountLabel || "Discount"),
       shippingTotal: moneyNumber(totals.shippingTotal),
       taxTotal: moneyNumber(totals.taxTotal),
       total: moneyNumber(totals.total),
