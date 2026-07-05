@@ -192,10 +192,16 @@ function escapeHtml(value: string) {
 }
 
 function isExpiredPushSubscription(caught: unknown) {
-  return (
-    typeof caught === "object" &&
-    caught !== null &&
-    "statusCode" in caught &&
-    (caught.statusCode === 404 || caught.statusCode === 410)
-  );
+  if (typeof caught !== "object" || caught === null || !("statusCode" in caught)) {
+    return false;
+  }
+
+  if (caught.statusCode === 404 || caught.statusCode === 410) {
+    return true;
+  }
+
+  return caught.statusCode === 400 &&
+    "body" in caught &&
+    typeof caught.body === "string" &&
+    caught.body.includes("VapidPkHashMismatch");
 }
