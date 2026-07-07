@@ -18,6 +18,20 @@ const isochroneSampleBearings = 24;
 const isochroneBinarySearchIterations = 5;
 const isochroneAlgorithmVersion = "route_round_trip_radial_v1";
 
+type AdminPromoCodeType = "discount" | "bogo";
+
+type AdminPromoCodeInput = {
+  code: string;
+  codeType?: AdminPromoCodeType;
+  discountPercent?: number;
+};
+
+type AdminPromoCodeUpdateInput = {
+  code?: string;
+  codeType?: AdminPromoCodeType;
+  discountPercent?: number;
+};
+
 export async function searchAdminAccounts(query: string, limit: number) {
   return {
     accounts: await searchAccounts(query, limit),
@@ -51,17 +65,15 @@ export async function listAdminPromoCodes() {
   return { promoCodes };
 }
 
-export async function createAdminPromoCode(input: {
-  code: string;
-  discountPercent: number;
-}) {
+export async function createAdminPromoCode(input: AdminPromoCodeInput) {
   const code = normalizePromoCode(input.code);
 
   if (!code) {
     throw new ApiRequestError(400, "Promo code is required.");
   }
 
-  const discountPercent = normalizeDiscountPercent(input.discountPercent);
+  const codeType = normalizePromoCodeType(input.codeType);
+  const discountPercent = normalizePromoDiscountPercent(input.discountPercent, codeType);
   const ref = getBayblazeFirestore().collection(discountCodesCollection).doc(code);
   const existing = await ref.get();
 
@@ -72,12 +84,13 @@ export async function createAdminPromoCode(input: {
   const record = {
     category: adminPromoCodeCategory,
     code,
-    codeType: "discount",
+    codeType,
     discountPercent,
     minimumSpendCents: 0,
     status: "active",
     usageLimit: 1000000,
     usedCount: 0,
+    ...(codeType === "bogo" ? { bogoBuyQuantity: 1, bogoFreeQuantity: 1 } : {}),
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   };
@@ -95,10 +108,7 @@ export async function createAdminPromoCode(input: {
 
 export async function updateAdminPromoCode(
   currentCode: string,
-  input: {
-    code?: string;
-    discountPercent?: number;
-  },
+  input: AdminPromoCodeUpdateInput,
 ) {
   const code = normalizePromoCode(currentCode);
 
@@ -136,13 +146,19 @@ export async function updateAdminPromoCode(
       }
     }
 
+    const nextCodeType = input.codeType === undefined
+      ? normalizePromoCodeType(currentData.codeType)
+      : normalizePromoCodeType(input.codeType);
+    const nextDiscountPercent = normalizePromoDiscountPercent(
+      input.discountPercent === undefined ? currentData.discountPercent : input.discountPercent,
+      nextCodeType,
+    );
     const nextData = {
       ...currentData,
       code: nextCode,
-      discountPercent:
-        input.discountPercent === undefined
-          ? normalizeDiscountPercent(currentData.discountPercent)
-          : normalizeDiscountPercent(input.discountPercent),
+      codeType: nextCodeType,
+      discountPercent: nextDiscountPercent,
+      ...(nextCodeType === "bogo" ? { bogoBuyQuantity: 1, bogoFreeQuantity: 1 } : {}),
       updatedAt: FieldValue.serverTimestamp(),
     };
 
@@ -506,9 +522,12 @@ function toDegrees(value: number) {
 }
 
 function serializeAdminPromoCode(id: string, data: Record<string, unknown>) {
+  const codeType = normalizePromoCodeType(data.codeType);
+
   return {
     code: normalizePromoCode(data.code) || normalizePromoCode(id),
-    discountPercent: normalizeDiscountPercent(data.discountPercent),
+    codeType,
+    discountPercent: readPromoDiscountPercent(data.discountPercent, codeType),
     minimumSpendCents: normalizeInteger(data.minimumSpendCents),
     status: typeof data.status === "string" && data.status ? data.status : "active",
     usageLimit: normalizeInteger(data.usageLimit),
@@ -526,6 +545,18 @@ function normalizePromoCode(value: unknown) {
     .toUpperCase();
 }
 
+function normalizePromoCodeType(value: unknown): AdminPromoCodeType {
+  return value === "bogo" ? "bogo" : "discount";
+}
+
+function normalizePromoDiscountPercent(value: unknown, codeType: AdminPromoCodeType) {
+  if (codeType === "bogo") {
+    return 0;
+  }
+
+  return normalizeDiscountPercent(value);
+}
+
 function normalizeDiscountPercent(value: unknown) {
   const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
 
@@ -534,6 +565,18 @@ function normalizeDiscountPercent(value: unknown) {
   }
 
   return Math.round(number * 100) / 100;
+}
+
+function readPromoDiscountPercent(value: unknown, codeType: AdminPromoCodeType) {
+  if (codeType === "bogo") {
+    return 0;
+  }
+
+  const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+
+  return Number.isFinite(number) && number > 0 && number <= 100
+    ? Math.round(number * 100) / 100
+    : 30;
 }
 
 function normalizeInteger(value: unknown) {
