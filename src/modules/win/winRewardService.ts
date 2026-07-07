@@ -21,6 +21,8 @@ const minimumSpendCents = 2000;
 const usageLimit = 1;
 const maxFreebieProducts = 48;
 
+type PromoCodeType = "discount" | "bogo";
+
 type WinContext = {
   campaign?: string;
   nfcTagId?: string;
@@ -36,7 +38,13 @@ type ClaimFreebieInput = {
 
 type PreviewCustomerDiscountCodeInput = {
   code: string;
+  items?: PreviewDiscountItem[];
   subtotalCents?: number;
+};
+
+type PreviewDiscountItem = {
+  quantity?: number;
+  unitPriceCents?: number;
 };
 
 type InventorySnapshot = {
@@ -243,9 +251,10 @@ async function previewDiscountCode(input: PreviewCustomerDiscountCodeInput) {
   const category = readString(discountCode.category);
   const ownerUid = readString(discountCode.ownerUid) || readString(discountCode.uid);
   const storedCode = normalizeReferralCode(discountCode.code) || code;
+  const codeType = readPromoCodeType(discountCode.codeType);
   const storedUsageLimit = readInteger(discountCode.usageLimit) || usageLimit;
   const usedCount = readInteger(discountCode.usedCount);
-  const storedDiscountPercent = readNumber(discountCode.discountPercent);
+  const storedDiscountPercent = codeType === "discount" ? readNumber(discountCode.discountPercent) : 0;
   const storedMinimumSpendCents = readInteger(discountCode.minimumSpendCents);
   const status = readString(discountCode.status) || "active";
 
@@ -257,7 +266,7 @@ async function previewDiscountCode(input: PreviewCustomerDiscountCodeInput) {
     throw new ApiRequestError(409, "That promo code has already been used.");
   }
 
-  if (storedDiscountPercent <= 0) {
+  if (codeType === "discount" && storedDiscountPercent <= 0) {
     throw new ApiRequestError(409, "That promo code is not configured correctly.");
   }
 
@@ -268,14 +277,21 @@ async function previewDiscountCode(input: PreviewCustomerDiscountCodeInput) {
     );
   }
 
-  const discountAmountCents =
-    subtotalCents > 0
+  const previewItems = normalizePreviewDiscountItems(input.items);
+  const bogoDiscount = codeType === "bogo" ? calculateBogoDiscountCents(previewItems) : { amountCents: 0, discountedQuantity: 0 };
+  const discountAmountCents = codeType === "bogo"
+    ? Math.min(subtotalCents, bogoDiscount.amountCents)
+    : subtotalCents > 0
       ? Math.min(subtotalCents, Math.round(subtotalCents * (storedDiscountPercent / 100)))
       : 0;
 
   return {
+    bogoBuyQuantity: codeType === "bogo" ? 1 : 0,
+    bogoDiscountedQuantity: bogoDiscount.discountedQuantity,
+    bogoFreeQuantity: codeType === "bogo" ? 1 : 0,
     category,
     code: storedCode,
+    codeType,
     discountAmountCents,
     discountPercent: storedDiscountPercent,
     eligible: true,
@@ -574,6 +590,49 @@ function normalizeMoneyCents(value: unknown) {
   const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
 
   return Number.isInteger(number) && number >= 0 ? number : 0;
+}
+
+function readPromoCodeType(value: unknown): PromoCodeType {
+  return value === "bogo" ? "bogo" : "discount";
+}
+
+function normalizePreviewDiscountItems(value: unknown): Array<{ quantity: number; unitPriceCents: number }> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+
+      const quantity = readInteger((item as PreviewDiscountItem).quantity);
+      const unitPriceCents = normalizeMoneyCents((item as PreviewDiscountItem).unitPriceCents);
+
+      if (quantity <= 0 || unitPriceCents <= 0) {
+        return null;
+      }
+
+      return { quantity, unitPriceCents };
+    })
+    .filter((item): item is { quantity: number; unitPriceCents: number } => item !== null);
+}
+
+function calculateBogoDiscountCents(items: Array<{ quantity: number; unitPriceCents: number }>) {
+  const unitPrices = items.flatMap((item) => Array.from({ length: item.quantity }, () => item.unitPriceCents));
+  const discountedQuantity = Math.floor(unitPrices.length / 2);
+
+  if (discountedQuantity <= 0) {
+    return { amountCents: 0, discountedQuantity: 0 };
+  }
+
+  unitPrices.sort((left, right) => left - right);
+
+  return {
+    amountCents: unitPrices.slice(0, discountedQuantity).reduce((total, price) => total + price, 0),
+    discountedQuantity,
+  };
 }
 
 function formatCents(cents: number) {
