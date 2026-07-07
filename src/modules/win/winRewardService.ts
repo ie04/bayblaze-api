@@ -15,6 +15,7 @@ const orderCompletionsCollection = "customer_win_order_completions";
 const defaultCampaign = "nfc-free-vape";
 const defaultSource = "nfc-mailer";
 const discountCodeCategory = "win_referral";
+const adminPromoCodeCategory = "admin_promo";
 const discountPercent = 20;
 const minimumSpendCents = 2000;
 const usageLimit = 1;
@@ -248,7 +249,7 @@ async function previewDiscountCode(input: PreviewCustomerDiscountCodeInput) {
   const storedMinimumSpendCents = readInteger(discountCode.minimumSpendCents);
   const status = readString(discountCode.status) || "active";
 
-  if (category !== discountCodeCategory) {
+  if (category !== discountCodeCategory && category !== adminPromoCodeCategory) {
     throw new ApiRequestError(409, "That promo code is not available for checkout.");
   }
 

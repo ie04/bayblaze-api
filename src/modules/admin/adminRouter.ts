@@ -6,12 +6,16 @@ import { accountBadges, accountRoles } from "../accounts/accountTypes";
 import { ApiRequestError } from "../drivers/driverWorkflowService";
 import {
   createAdminIsochronePlot,
+  createAdminPromoCode,
+  deleteAdminPromoCode,
   getAdminDriverMapState,
   getAdminDriverRoutes,
+  listAdminPromoCodes,
   searchAdminAccounts,
   sendAdminOrderDetail,
   sendAdminOrders,
   updateAdminAccount,
+  updateAdminPromoCode,
 } from "./adminService";
 
 const accountUpdateSchema = z.object({
@@ -33,6 +37,18 @@ const isochroneSchema = z.object({
   }),
   speedMph: z.number().optional(),
   travelMinutes: z.number(),
+});
+
+const promoCodeCreateSchema = z.object({
+  code: z.string().min(1),
+  discountPercent: z.number().positive().max(100),
+});
+
+const promoCodeUpdateSchema = z.object({
+  code: z.string().min(1).optional(),
+  discountPercent: z.number().positive().max(100).optional(),
+}).refine((value) => value.code !== undefined || value.discountPercent !== undefined, {
+  message: "Promo code update requires at least one field.",
 });
 
 export function createAdminRouter() {
@@ -79,6 +95,40 @@ export function createAdminRouter() {
     try {
       const parsed = isochroneSchema.parse(req.body);
       res.json({ plot: await createAdminIsochronePlot(parsed) });
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.get("/admin/promo-codes", async (_req, res, next) => {
+    try {
+      res.json(await listAdminPromoCodes());
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/admin/promo-codes", async (req, res, next) => {
+    try {
+      const parsed = promoCodeCreateSchema.parse(req.body ?? {});
+      res.json(await createAdminPromoCode(parsed));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.patch("/admin/promo-codes/:code", async (req, res, next) => {
+    try {
+      const parsed = promoCodeUpdateSchema.parse(req.body ?? {});
+      res.json(await updateAdminPromoCode(String(req.params.code || ""), parsed));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.delete("/admin/promo-codes/:code", async (req, res, next) => {
+    try {
+      res.json(await deleteAdminPromoCode(String(req.params.code || "")));
     } catch (caught) {
       next(caught);
     }

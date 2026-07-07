@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getBayblazeFirestore } from "../../clients/firebaseAdminClient";
 import { forwardAdminOrderDetailRequest, forwardAdminOrdersRequest } from "../../clients/medusaAdminClient";
 import { sendUpstreamJson } from "../../http/upstream";
@@ -11,6 +11,8 @@ import { calculateRouteDuration, geocodeAddress, type LatLng } from "../isochron
 import type { Response as ExpressResponse } from "express";
 
 const isochroneCacheCollection = "coverage_isochrones";
+const discountCodesCollection = "customer_discount_codes";
+const adminPromoCodeCategory = "admin_promo";
 const isochroneCacheTtlMs = 6 * 60 * 60 * 1000;
 const isochroneSampleBearings = 24;
 const isochroneBinarySearchIterations = 5;
@@ -35,6 +37,154 @@ export async function updateAdminAccount(
   return {
     account: await updateAccountAccess(uid, input),
   };
+}
+
+export async function listAdminPromoCodes() {
+  const snapshot = await getBayblazeFirestore()
+    .collection(discountCodesCollection)
+    .where("category", "==", adminPromoCodeCategory)
+    .get();
+  const promoCodes = snapshot.docs
+    .map((doc) => serializeAdminPromoCode(doc.id, doc.data()))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+
+  return { promoCodes };
+}
+
+export async function createAdminPromoCode(input: {
+  code: string;
+  discountPercent: number;
+}) {
+  const code = normalizePromoCode(input.code);
+
+  if (!code) {
+    throw new ApiRequestError(400, "Promo code is required.");
+  }
+
+  const discountPercent = normalizeDiscountPercent(input.discountPercent);
+  const ref = getBayblazeFirestore().collection(discountCodesCollection).doc(code);
+  const existing = await ref.get();
+
+  if (existing.exists) {
+    throw new ApiRequestError(409, "That promo code already exists.");
+  }
+
+  const record = {
+    category: adminPromoCodeCategory,
+    code,
+    codeType: "discount",
+    discountPercent,
+    minimumSpendCents: 0,
+    status: "active",
+    usageLimit: 1000000,
+    usedCount: 0,
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  await ref.set(record);
+
+  return {
+    promoCode: serializeAdminPromoCode(code, {
+      ...record,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }),
+  };
+}
+
+export async function updateAdminPromoCode(
+  currentCode: string,
+  input: {
+    code?: string;
+    discountPercent?: number;
+  },
+) {
+  const code = normalizePromoCode(currentCode);
+
+  if (!code) {
+    throw new ApiRequestError(400, "Promo code is required.");
+  }
+
+  const nextCode = input.code === undefined ? code : normalizePromoCode(input.code);
+
+  if (!nextCode) {
+    throw new ApiRequestError(400, "Promo code is required.");
+  }
+
+  const firestore = getBayblazeFirestore();
+  const currentRef = firestore.collection(discountCodesCollection).doc(code);
+  const nextRef = firestore.collection(discountCodesCollection).doc(nextCode);
+  const promoCode = await firestore.runTransaction(async (transaction) => {
+    const currentSnapshot = await transaction.get(currentRef);
+
+    if (!currentSnapshot.exists) {
+      throw new ApiRequestError(404, "That promo code was not found.");
+    }
+
+    const currentData = currentSnapshot.data() ?? {};
+
+    if (String(currentData.category || "") !== adminPromoCodeCategory) {
+      throw new ApiRequestError(409, "That promo code is not managed by Admin Promo.");
+    }
+
+    if (nextCode !== code) {
+      const nextSnapshot = await transaction.get(nextRef);
+
+      if (nextSnapshot.exists) {
+        throw new ApiRequestError(409, "That promo code already exists.");
+      }
+    }
+
+    const nextData = {
+      ...currentData,
+      code: nextCode,
+      discountPercent:
+        input.discountPercent === undefined
+          ? normalizeDiscountPercent(currentData.discountPercent)
+          : normalizeDiscountPercent(input.discountPercent),
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    if (nextCode !== code) {
+      transaction.set(nextRef, nextData);
+      transaction.delete(currentRef);
+    } else {
+      transaction.set(currentRef, nextData, { merge: true });
+    }
+
+    return serializeAdminPromoCode(nextCode, {
+      ...nextData,
+      updatedAt: new Date().toISOString(),
+    });
+  });
+
+  return { promoCode };
+}
+
+export async function deleteAdminPromoCode(codeInput: string) {
+  const code = normalizePromoCode(codeInput);
+
+  if (!code) {
+    throw new ApiRequestError(400, "Promo code is required.");
+  }
+
+  const ref = getBayblazeFirestore().collection(discountCodesCollection).doc(code);
+  const snapshot = await ref.get();
+
+  if (!snapshot.exists) {
+    throw new ApiRequestError(404, "That promo code was not found.");
+  }
+
+  const data = snapshot.data() ?? {};
+
+  if (String(data.category || "") !== adminPromoCodeCategory) {
+    throw new ApiRequestError(409, "That promo code is not managed by Admin Promo.");
+  }
+
+  await ref.delete();
+
+  return { ok: true };
 }
 
 export async function getAdminDriverMapState() {
@@ -353,4 +503,57 @@ function toRadians(value: number) {
 
 function toDegrees(value: number) {
   return (value * 180) / Math.PI;
+}
+
+function serializeAdminPromoCode(id: string, data: Record<string, unknown>) {
+  return {
+    code: normalizePromoCode(data.code) || normalizePromoCode(id),
+    discountPercent: normalizeDiscountPercent(data.discountPercent),
+    minimumSpendCents: normalizeInteger(data.minimumSpendCents),
+    status: typeof data.status === "string" && data.status ? data.status : "active",
+    usageLimit: normalizeInteger(data.usageLimit),
+    usedCount: normalizeInteger(data.usedCount),
+    createdAt: serializeTimestamp(data.createdAt),
+    updatedAt: serializeTimestamp(data.updatedAt),
+  };
+}
+
+function normalizePromoCode(value: unknown) {
+  return String(value || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .slice(0, 80)
+    .toUpperCase();
+}
+
+function normalizeDiscountPercent(value: unknown) {
+  const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+
+  if (!Number.isFinite(number) || number <= 0 || number > 100) {
+    throw new ApiRequestError(400, "Discount percent must be between 1 and 100.");
+  }
+
+  return Math.round(number * 100) / 100;
+}
+
+function normalizeInteger(value: unknown) {
+  const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+
+  return Number.isInteger(number) && number >= 0 ? number : 0;
+}
+
+function serializeTimestamp(value: unknown) {
+  if (value instanceof Timestamp) {
+    return value.toDate().toISOString();
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return "";
 }

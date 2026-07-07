@@ -248,6 +248,28 @@ POST /v1/auth/google/callback
 GET  /v1/auth/me
 ```
 
+Admin dashboard routes:
+
+```text
+GET    /v1/admin/accounts
+PATCH  /v1/admin/accounts/:uid
+GET    /v1/admin/drivers/map
+GET    /v1/admin/drivers/routes
+POST   /v1/admin/isochrones
+GET    /v1/admin/promo-codes
+POST   /v1/admin/promo-codes
+PATCH  /v1/admin/promo-codes/:code
+DELETE /v1/admin/promo-codes/:code
+GET    /v1/admin/orders
+GET    /v1/admin/orders/:orderId
+```
+
+Admin-created storefront promo codes are stored in
+`customer_discount_codes/{CODE}` with `category: "admin_promo"`. The public and
+customer discount preview endpoints accept both legacy `win_referral` discount
+records and `admin_promo` records; the admin dashboard is the only browser app
+that may create, update, or delete admin promo records.
+
 Customer storefront account routes:
 
 ```text
