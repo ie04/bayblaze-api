@@ -118,7 +118,11 @@ export function createAdminRouter() {
   router.post("/admin/promo-codes", async (req, res, next) => {
     try {
       const parsed = promoCodeCreateSchema.parse(req.body ?? {});
-      res.json(await createAdminPromoCode(parsed));
+      res.json(await createAdminPromoCode({
+        code: parsed.code,
+        codeType: parsed.codeType,
+        discountPercent: parsed.discountPercent ?? 0,
+      }));
     } catch (caught) {
       next(caught);
     }
