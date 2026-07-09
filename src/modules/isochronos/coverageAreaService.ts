@@ -358,6 +358,7 @@ async function ensureDefaultCoverageArea() {
   const existing = await collection.limit(1).get();
 
   if (!existing.empty) {
+    await backfillDefaultCoverageAreaPolygon();
     return;
   }
 
@@ -382,6 +383,47 @@ async function ensureDefaultCoverageArea() {
     },
     { merge: true },
   );
+
+  await backfillDefaultCoverageAreaPolygon();
+}
+
+async function backfillDefaultCoverageAreaPolygon() {
+  const ref = getBayblazeFirestore().collection(coverageAreasCollection).doc(defaultCoverageAreaId);
+  const snapshot = await ref.get();
+
+  if (!snapshot.exists) {
+    return;
+  }
+
+  const coverageArea = serializeCoverageArea(snapshot.id, snapshot.data() ?? {});
+
+  if (coverageArea.polygon.length > 0 || coverageArea.lastGeneratedAt) {
+    return;
+  }
+
+  try {
+    const now = new Date();
+    const generated = await generateCoveragePolygon(coverageArea);
+
+    await ref.set(
+      {
+        ...generated,
+        algorithmVersion: coverageAlgorithmVersion,
+        lastGeneratedAt: now,
+        lastGenerationError: "",
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  } catch (caught) {
+    await ref.set(
+      {
+        lastGenerationError: caught instanceof Error ? caught.message : "Coverage polygon generation failed.",
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  }
 }
 
 async function normalizeCoverageAreaInput(input: CoverageAreaInput, current?: CoverageArea) {
