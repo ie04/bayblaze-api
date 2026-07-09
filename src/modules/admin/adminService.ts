@@ -306,7 +306,6 @@ export function regenerateDueAdminCoverageAreas() {
 export async function createAdminIsochronePlot(input: {
   force?: boolean;
   origin: { address?: string; lat?: number; lng?: number };
-  speedMph?: number;
   travelMinutes: number;
 }) {
   return createStandaloneIsochronePlot(input);

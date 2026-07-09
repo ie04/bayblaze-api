@@ -9,6 +9,7 @@ const coverageAreasCollection = "coverage_areas";
 const isochroneCacheCollection = "coverage_isochrones";
 const isochroneCacheTtlMs = 6 * 60 * 60 * 1000;
 const coverageAlgorithmVersion = "bidirectional_route_isochrone_v1";
+const coverageSearchSpeedMph = 30;
 
 const defaultCoverageAreaId = "wh1";
 const defaultCoverageArea = {
@@ -16,7 +17,6 @@ const defaultCoverageArea = {
   description: "Default BayBlaze warehouse delivery coverage area.",
   label: "WH1 Coverage",
   maxDriveTimeMinutes: 30,
-  speedMph: 30,
   warehouse: {
     address: "13702 42nd St Tampa, FL, 33613",
     label: "BayBlaze Warehouse 1",
@@ -47,7 +47,6 @@ export type CoverageArea = {
   polygon: LatLng[];
   radiusMeters: number;
   schedule: CoverageAreaSchedule;
-  speedMph: number;
   updatedAt: string;
   warehouse: CoverageWarehouse;
 };
@@ -73,7 +72,6 @@ export type CoverageAreaInput = {
     intervalHours?: number | null;
     nextRunAt?: string | null;
   };
-  speedMph?: number;
   warehouse?: {
     address?: string;
     label?: string;
@@ -310,7 +308,6 @@ export async function resolveCoverageAreaForDestination(destination: LatLng) {
 export async function createStandaloneIsochronePlot(input: {
   force?: boolean;
   origin: { address?: string; lat?: number; lng?: number };
-  speedMph?: number;
   travelMinutes: number;
 }) {
   const origin = await resolveOrigin(input.origin);
@@ -321,7 +318,6 @@ export async function createStandaloneIsochronePlot(input: {
     label: "Coverage preview",
     maxDriveTimeMinutes: clamp(input.travelMinutes / 2, 1, 180),
     schedule: normalizeSchedule(),
-    speedMph: clamp(input.speedMph ?? 30, 5, 70),
     warehouse: {
       address: origin.address || "",
       label: "Coverage preview origin",
@@ -339,7 +335,6 @@ export async function createStandaloneIsochronePlot(input: {
     method: coverageAlgorithmVersion,
     polygon: generated.polygon,
     radiusMeters: generated.radiusMeters,
-    speedMph: base.speedMph,
     travelMinutes: Math.round(base.maxDriveTimeMinutes * 2),
   };
 }
@@ -441,7 +436,6 @@ async function normalizeCoverageAreaInput(input: CoverageAreaInput, current?: Co
     label,
     maxDriveTimeMinutes: clamp(input.maxDriveTimeMinutes ?? current?.maxDriveTimeMinutes ?? 30, 1, 180),
     schedule: normalizeSchedule(input.schedule, current?.schedule),
-    speedMph: clamp(input.speedMph ?? current?.speedMph ?? 30, 5, 70),
     warehouse,
   };
 }
@@ -501,7 +495,7 @@ function normalizeSchedule(input?: CoverageAreaInput["schedule"], current?: Cove
 }
 
 async function generateCoveragePolygon(
-  coverageArea: Pick<CoverageArea, "granularity" | "maxDriveTimeMinutes" | "speedMph" | "warehouse">,
+  coverageArea: Pick<CoverageArea, "granularity" | "maxDriveTimeMinutes" | "warehouse">,
   force = false,
 ) {
   const origin = coverageArea.warehouse.location;
@@ -512,7 +506,7 @@ async function generateCoveragePolygon(
     return cached;
   }
 
-  const maxOutboundMeters = coverageArea.speedMph * 1609.344 * (coverageArea.maxDriveTimeMinutes / 60);
+  const maxOutboundMeters = coverageSearchSpeedMph * 1609.344 * (coverageArea.maxDriveTimeMinutes / 60);
   const bearings = Array.from(
     { length: coverageArea.granularity.sampleBearings },
     (_, index) => (360 / coverageArea.granularity.sampleBearings) * index,
@@ -612,7 +606,6 @@ function didCoverageRulesChange(
 ) {
   return (
     current.maxDriveTimeMinutes !== next.maxDriveTimeMinutes ||
-    current.speedMph !== next.speedMph ||
     current.granularity.binarySearchIterations !== next.granularity.binarySearchIterations ||
     current.granularity.sampleBearings !== next.granularity.sampleBearings ||
     current.warehouse.address !== next.warehouse.address ||
@@ -691,13 +684,13 @@ async function storeCachedIsochronePlot(cacheKey: string, plot: {
   });
 }
 
-function createIsochroneCacheKey(coverageArea: Pick<CoverageArea, "granularity" | "maxDriveTimeMinutes" | "speedMph" | "warehouse">) {
+function createIsochroneCacheKey(coverageArea: Pick<CoverageArea, "granularity" | "maxDriveTimeMinutes" | "warehouse">) {
   return createHash("sha256")
     .update([
       coverageAlgorithmVersion,
       coverageArea.warehouse.location.lat.toFixed(6),
       coverageArea.warehouse.location.lng.toFixed(6),
-      String(coverageArea.speedMph),
+      String(coverageSearchSpeedMph),
       String(coverageArea.maxDriveTimeMinutes),
       String(coverageArea.granularity.sampleBearings),
       String(coverageArea.granularity.binarySearchIterations),
@@ -806,7 +799,6 @@ function serializeCoverageArea(id: string, data: Record<string, unknown>): Cover
       intervalHours: readNumber(scheduleRecord.intervalHours),
       nextRunAt: normalizeText(scheduleRecord.nextRunAt) || null,
     },
-    speedMph: clamp(readNumber(data.speedMph) ?? 30, 5, 70),
     updatedAt: serializeTimestamp(data.updatedAt) || normalizeText(data.updatedAtFallback),
     warehouse: {
       address: normalizeText(warehouseRecord.address),

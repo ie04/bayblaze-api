@@ -42,7 +42,6 @@ const isochroneSchema = z.object({
     lat: z.number().optional(),
     lng: z.number().optional(),
   }),
-  speedMph: z.number().optional(),
   travelMinutes: z.number(),
 });
 
@@ -62,7 +61,6 @@ const coverageAreaSchema = z.object({
     intervalHours: z.number().positive().max(24 * 30).nullable().optional(),
     nextRunAt: z.string().nullable().optional(),
   }).optional(),
-  speedMph: z.number().positive().max(70).optional(),
   warehouse: z.object({
     address: z.string().optional(),
     label: z.string().optional(),

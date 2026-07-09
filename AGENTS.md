@@ -370,7 +370,7 @@ may intersect; checkout resolves accepted destinations to the matching active
 zone with the shortest total bidirectional drive time and rejects destinations
 outside all active zones with `OUTSIDE_COVERAGE_AREA`. Coverage records include
 label, optional description, warehouse identity/address/location, max one-way
-drive minutes, generation speed, polygon granularity, active state, generated
+drive minutes, polygon granularity, active state, generated
 polygon/radius, and optional regeneration schedule metadata.
 
 `POST /v1/admin/isochrones` remains as a compatibility preview route, while
