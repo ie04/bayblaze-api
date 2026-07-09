@@ -1,6 +1,6 @@
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getBayblazeFirestore } from "../../clients/firebaseAdminClient";
-import { forwardAdminOrderDetailRequest, forwardAdminOrdersRequest } from "../../clients/medusaAdminClient";
+import { forwardAdminOrderDeleteRequest, forwardAdminOrderDetailRequest, forwardAdminOrdersRequest } from "../../clients/medusaAdminClient";
 import { sendUpstreamJson } from "../../http/upstream";
 import { searchAccounts, updateAccountAccess } from "../accounts/accountService";
 import type { AccountBadge, AccountRole } from "../accounts/accountTypes";
@@ -329,6 +329,18 @@ export async function sendAdminOrderDetail(res: ExpressResponse, orderId: string
   return sendUpstreamJson(res, upstream, {
     fallbackMessage: "Medusa order detail API returned a non-JSON response.",
     upstreamName: "Medusa order detail",
+  });
+}
+
+export async function sendAdminOrderDelete(res: ExpressResponse, orderId: string, input: { releaseStock: boolean }) {
+  if (!orderId.trim()) {
+    throw new ApiRequestError(400, "Order ID is required.");
+  }
+
+  const upstream = await forwardAdminOrderDeleteRequest(orderId, input);
+  return sendUpstreamJson(res, upstream, {
+    fallbackMessage: "Medusa order delete API returned a non-JSON response.",
+    upstreamName: "Medusa order delete",
   });
 }
 

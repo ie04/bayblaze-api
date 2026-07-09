@@ -268,6 +268,7 @@ PATCH  /v1/admin/promo-codes/:code
 DELETE /v1/admin/promo-codes/:code
 GET    /v1/admin/orders
 GET    /v1/admin/orders/:orderId
+DELETE /v1/admin/orders/:orderId
 ```
 
 Admin-created storefront promo codes are stored in
@@ -343,6 +344,7 @@ POST  /v1/admin/coverage-areas/:coverageAreaId/regenerate
 POST  /v1/admin/coverage-areas/regenerate-due
 GET   /v1/admin/orders
 GET   /v1/admin/orders/:orderId
+DELETE /v1/admin/orders/:orderId
 ```
 
 `/v1/admin/*` routes require a BayBlaze account session bearer token from an
@@ -350,6 +352,15 @@ employee account with the `admin` role. The admin dashboard lives at
 `admin.bayblaze.net` and must call only `bayblaze-api`; it must not import
 Firebase, Firestore, Medusa, Google Maps, or service-token clients in browser
 code.
+
+Admin order deletion uses `DELETE /v1/admin/orders/:orderId` with
+`releaseStock: boolean`. The API forwards this to embedded Medusa's BayBlaze
+admin order route, which soft-deletes by setting order metadata such as
+`bayblaze_deleted`, `bayblaze_deleted_at`, and `bayblaze_order_status:
+"deleted"` so deleted orders can remain visible to admin clients. When
+`releaseStock` is true, Medusa increments the ordered variants' BayBlaze
+inventory quantities and local-delivery stock levels before marking the order
+deleted.
 
 Coverage areas are stored in `coverage_areas/{id}`. A coverage area is a
 polygonal bidirectional drive-time isochrone centered on a warehouse point:

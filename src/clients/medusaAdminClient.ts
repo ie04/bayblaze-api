@@ -40,3 +40,18 @@ export function forwardAdminOrderCancelRequest(orderId: string) {
     body: JSON.stringify({ action: "cancel" }),
   });
 }
+
+export function forwardAdminOrderDeleteRequest(orderId: string, input: { releaseStock: boolean }) {
+  const medusaBackendUrl = getMedusaBackendUrl();
+  const basePath = env.MEDUSA_ADMIN_ORDERS_PATH.replace(/\/$/, "");
+  const url = new URL(`${basePath}/${encodeURIComponent(orderId)}`, medusaBackendUrl);
+
+  return fetch(url, {
+    headers: createBayblazeMedusaHeaders({
+      acceptJson: true,
+      contentTypeJson: true,
+    }),
+    method: "DELETE",
+    body: JSON.stringify(input),
+  });
+}

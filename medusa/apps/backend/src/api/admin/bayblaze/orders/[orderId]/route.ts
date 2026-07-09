@@ -160,6 +160,61 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   });
 }
 
+export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
+  if (!assertBayblazeServiceToken(req, res)) {
+    return;
+  }
+
+  const orderId = typeof req.params.orderId === "string" ? req.params.orderId.trim() : "";
+
+  if (!orderId) {
+    return res.status(400).json({ message: "Order ID is required." });
+  }
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const releaseStock = body.releaseStock === true;
+  const logger = req.scope.resolve("logger");
+  const query = req.scope.resolve<Query>(ContainerRegistrationKeys.QUERY);
+  const orderModuleService = req.scope.resolve(Modules.ORDER);
+  const { data } = await query.graph<BayblazeAdminOrderDetail>({
+    entity: "order",
+    fields: orderFields,
+  });
+  const order = data.find((candidate) => matchesOrderId(candidate, orderId));
+
+  if (!order) {
+    return res.status(404).json({ message: `Order ${orderId} was not found.` });
+  }
+
+  const releasedItems = releaseStock ? await releaseOrderInventory(req, query, order) : [];
+  const deletedAt = new Date().toISOString();
+  const metadata = {
+    ...(order.metadata ?? {}),
+    bayblaze_deleted: true,
+    bayblaze_deleted_at: deletedAt,
+    bayblaze_deleted_release_stock: releaseStock,
+    bayblaze_order_status: "deleted",
+    order_status: "deleted",
+  };
+
+  await orderModuleService.updateOrders(order.id, {
+    metadata,
+  } as never);
+
+  logger.info(
+    `Soft-deleted BayBlaze order ${getOrderReference(order)}; restored ${releasedItems.length} inventory line(s).`,
+  );
+
+  return res.status(200).json({
+    deleted: true,
+    deletedAt,
+    orderId: order.id,
+    orderReference: getOrderReference(order),
+    releasedItems,
+    releasedStock: releaseStock,
+  });
+}
+
 function matchesOrderId(order: BayblazeAdminOrderDetail, orderId: string) {
   return [order.id, order.custom_display_id, order.display_id]
     .map((value) => (typeof value === "number" ? String(value) : value))

@@ -18,6 +18,7 @@ import {
   regenerateDueAdminCoverageAreas,
   searchAdminAccounts,
   sendAdminOrderDetail,
+  sendAdminOrderDelete,
   sendAdminOrders,
   updateAdminAccount,
   updateAdminCoverageArea,
@@ -102,6 +103,10 @@ const promoCodeUpdateSchema = z.object({
   discountPercent: z.number().positive().max(100).optional(),
 }).refine((value) => value.code !== undefined || value.codeType !== undefined || value.discountPercent !== undefined, {
   message: "Promo code update requires at least one field.",
+});
+
+const orderDeleteSchema = z.object({
+  releaseStock: z.boolean().optional().default(false),
 });
 
 export function createAdminRouter() {
@@ -262,6 +267,15 @@ export function createAdminRouter() {
   router.get("/admin/orders/:orderId", async (req, res, next) => {
     try {
       await sendAdminOrderDetail(res, String(req.params.orderId || ""));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.delete("/admin/orders/:orderId", async (req, res, next) => {
+    try {
+      const parsed = orderDeleteSchema.parse(req.body ?? {});
+      await sendAdminOrderDelete(res, String(req.params.orderId || ""), parsed);
     } catch (caught) {
       next(caught);
     }
