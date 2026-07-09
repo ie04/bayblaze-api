@@ -1004,6 +1004,15 @@ BAYBLAZE_STORAGE_MODE=...
 BAYBLAZE_UPLOAD_DIR=...
 ```
 
+Production CORS is normally controlled by `CORS_ORIGINS`, and the API also
+allows BayBlaze Admin Vercel preview origins matching
+`https://bayblaze-admin*.vercel.app` so preview deployments can call
+`https://api.bayblaze.net` without browser `Failed to fetch` CORS failures.
+After changes that affect an admin screen, wait for the relevant deploy to
+finish and smoke-test the deployed screen plus its API preflight from both
+`https://admin.bayblaze.net` and the active Vercel preview origin when one is
+being used.
+
 ## Migration priority
 
 Recommended first migrations:

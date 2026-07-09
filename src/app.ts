@@ -15,6 +15,8 @@ import { IsochronosRequestError } from "./modules/isochronos/googleMapsService";
 import { createOrderBridgeRouter } from "./modules/orders/orderBridgeRouter";
 import { createWinRewardRouter } from "./modules/win/winRewardRouter";
 
+const vercelPreviewOriginPattern = /^https:\/\/bayblaze-admin(?:-[a-z0-9-]+)?\.vercel\.app$/i;
+
 export function createApp() {
   const app = express();
 
@@ -25,10 +27,7 @@ export function createApp() {
   app.use(
     cors({
       credentials: true,
-      origin:
-        env.CORS_ORIGINS_LIST.length > 0
-          ? env.CORS_ORIGINS_LIST
-          : true,
+      origin: isAllowedCorsOrigin,
     }),
   );
 
@@ -86,4 +85,20 @@ export function createApp() {
   });
 
   return app;
+}
+
+function isAllowedCorsOrigin(origin: string | undefined, callback: (err: Error | null, origin?: boolean) => void) {
+  if (!origin) {
+    return callback(null, true);
+  }
+
+  if (env.CORS_ORIGINS_LIST.length === 0) {
+    return callback(null, true);
+  }
+
+  if (env.CORS_ORIGINS_LIST.includes(origin) || vercelPreviewOriginPattern.test(origin)) {
+    return callback(null, true);
+  }
+
+  return callback(null, false);
 }
