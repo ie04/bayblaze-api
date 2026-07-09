@@ -51,8 +51,8 @@ const coverageAreaSchema = z.object({
   active: z.boolean().optional(),
   description: z.string().optional(),
   granularity: z.object({
-    binarySearchIterations: z.number().int().min(3).max(10).optional(),
-    sampleBearings: z.number().int().min(8).max(144).optional(),
+    binarySearchIterations: z.number().int().min(3).optional(),
+    sampleBearings: z.number().int().min(8).optional(),
   }).optional(),
   label: z.string().min(1).optional(),
   maxDriveTimeMinutes: z.number().positive().max(180).optional(),
