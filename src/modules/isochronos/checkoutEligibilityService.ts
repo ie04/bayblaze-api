@@ -1,4 +1,5 @@
 import { calculateRouteDuration, geocodeAddress, type LatLng } from "./googleMapsService";
+import { resolveCoverageAreaForDestination } from "./coverageAreaService";
 
 const inventoryStates = {
   inWarehouse: "IN_WAREHOUSE",
@@ -10,12 +11,6 @@ const fulfillmentModes = {
   partialOnVehicle: "PARTIAL_ON_VEHICLE",
   warehousePickupRequired: "WAREHOUSE_PICKUP_REQUIRED",
 } as const;
-
-const warehouseProfile = {
-  address: "13702 42nd St Tampa, FL, 33613",
-  label: "BayBlaze Warehouse 1",
-  warehouseId: "WH1",
-};
 
 const driverProfile = {
   activeVehicleId: "OWNER_VEHICLE_1",
@@ -33,7 +28,6 @@ const thresholds = {
   expressMaxMinutes: 35,
   manualReviewMaxMinutes: 75,
   normalMaxMinutes: 55,
-  wh1RoundTripMaxMinutes: 60,
 };
 
 type RoutingItem = {
@@ -80,18 +74,18 @@ export async function evaluatePreCheckoutEligibility(candidate: EligibilityCandi
   }
 
   const destination = await resolveDestination(candidate.destination);
-  const warehouse = await resolveWarehouse();
-  const wh1Coverage = await evaluateWh1RoundTripCoverage(destination.location, warehouse.location);
+  const coverage = await resolveCoverageAreaForDestination(destination.location);
 
-  if (!wh1Coverage.accepted) {
+  if (!coverage.accepted || !coverage.coverageArea) {
     return rejectionResponse({
       candidate,
       message:
         "Sorry, BayBlaze cannot reasonably fulfill this delivery yet. We are actively working to expand our coverage area.",
-      reason: "OUTSIDE_WH1_ONE_HOUR_ROUND_TRIP_ISOCHRONE",
+      reason: "OUTSIDE_COVERAGE_AREA",
     });
   }
 
+  const warehouse = coverage.coverageArea.warehouse;
   const fulfillmentMode = getFulfillmentMode(itemValidation.items);
   const origin = warehouse.location;
   const routeStops =
@@ -149,6 +143,7 @@ export async function evaluatePreCheckoutEligibility(candidate: EligibilityCandi
         address: destination.address,
         location: destination.location,
       },
+      coverageArea: coverage.coverageArea,
       items: itemValidation.items,
       priority: readString(candidate.priority) || "NORMAL",
       promisedWindowMinutes: readNumber(candidate.promisedWindowMinutes),
@@ -156,6 +151,8 @@ export async function evaluatePreCheckoutEligibility(candidate: EligibilityCandi
     },
     requiresCustomerConfirmation: true,
     routingContext: {
+      coverageArea: coverage.coverageArea,
+      coverageDriveTime: coverage.driveTime,
       driverProfile,
       fulfillmentMode,
       origin,
@@ -165,7 +162,6 @@ export async function evaluatePreCheckoutEligibility(candidate: EligibilityCandi
       routeStops,
       vehicleProfile,
       warehouseProfile: warehouse,
-      wh1Coverage,
     },
   };
 }
@@ -261,27 +257,6 @@ async function resolveDestination(destination: unknown) {
   return {
     address,
     location: { lat: geocode.lat, lng: geocode.lng },
-  };
-}
-
-async function resolveWarehouse() {
-  const geocode = await geocodeAddress(warehouseProfile.address);
-
-  return {
-    ...warehouseProfile,
-    location: { lat: geocode.lat, lng: geocode.lng },
-  };
-}
-
-async function evaluateWh1RoundTripCoverage(destination: LatLng, warehouse: LatLng) {
-  const outbound = await calculateRouteDuration([warehouse, destination]);
-  const inbound = await calculateRouteDuration([destination, warehouse]);
-  const durationMinutes = outbound.durationMinutes + inbound.durationMinutes;
-
-  return {
-    accepted: durationMinutes <= thresholds.wh1RoundTripMaxMinutes,
-    durationMinutes,
-    maxRoundTripMinutes: thresholds.wh1RoundTripMaxMinutes,
   };
 }
 

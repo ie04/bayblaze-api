@@ -5,16 +5,22 @@ import { requireAccountAuth, requireAccountRole, type AccountAuthedRequest } fro
 import { accountBadges, accountRoles } from "../accounts/accountTypes";
 import { ApiRequestError } from "../drivers/driverWorkflowService";
 import {
+  createAdminCoverageArea,
   createAdminIsochronePlot,
   createAdminPromoCode,
+  deleteAdminCoverageArea,
   deleteAdminPromoCode,
   getAdminDriverMapState,
   getAdminDriverRoutes,
+  listAdminCoverageAreas,
   listAdminPromoCodes,
+  regenerateAdminCoverageArea,
+  regenerateDueAdminCoverageAreas,
   searchAdminAccounts,
   sendAdminOrderDetail,
   sendAdminOrders,
   updateAdminAccount,
+  updateAdminCoverageArea,
   updateAdminPromoCode,
 } from "./adminService";
 
@@ -40,6 +46,46 @@ const isochroneSchema = z.object({
 });
 
 const promoCodeTypeSchema = z.enum(["discount", "bogo"]);
+
+const coverageAreaSchema = z.object({
+  active: z.boolean().optional(),
+  description: z.string().optional(),
+  granularity: z.object({
+    binarySearchIterations: z.number().int().min(3).max(10).optional(),
+    sampleBearings: z.number().int().min(8).max(144).optional(),
+  }).optional(),
+  label: z.string().min(1).optional(),
+  maxDriveTimeMinutes: z.number().positive().max(180).optional(),
+  schedule: z.object({
+    enabled: z.boolean().optional(),
+    intervalHours: z.number().positive().max(24 * 30).nullable().optional(),
+    nextRunAt: z.string().nullable().optional(),
+  }).optional(),
+  speedMph: z.number().positive().max(70).optional(),
+  warehouse: z.object({
+    address: z.string().optional(),
+    label: z.string().optional(),
+    lat: z.number().optional(),
+    lng: z.number().optional(),
+    warehouseId: z.string().optional(),
+  }).optional(),
+});
+
+const coverageAreaCreateSchema = coverageAreaSchema.extend({
+  label: z.string().min(1),
+  maxDriveTimeMinutes: z.number().positive().max(180),
+  warehouse: z.object({
+    address: z.string().optional(),
+    label: z.string().optional(),
+    lat: z.number().optional(),
+    lng: z.number().optional(),
+    warehouseId: z.string().optional(),
+  }),
+});
+
+const coverageAreaUpdateSchema = coverageAreaSchema.extend({
+  regenerate: z.boolean().optional(),
+});
 
 const promoCodeCreateSchema = z.object({
   code: z.string().min(1),
@@ -102,6 +148,56 @@ export function createAdminRouter() {
     try {
       const parsed = isochroneSchema.parse(req.body);
       res.json({ plot: await createAdminIsochronePlot(parsed) });
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.get("/admin/coverage-areas", async (_req, res, next) => {
+    try {
+      res.json(await listAdminCoverageAreas());
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/admin/coverage-areas", async (req, res, next) => {
+    try {
+      const parsed = coverageAreaCreateSchema.parse(req.body ?? {});
+      res.json(await createAdminCoverageArea(parsed));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/admin/coverage-areas/regenerate-due", async (_req, res, next) => {
+    try {
+      res.json(await regenerateDueAdminCoverageAreas());
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.patch("/admin/coverage-areas/:coverageAreaId", async (req, res, next) => {
+    try {
+      const parsed = coverageAreaUpdateSchema.parse(req.body ?? {});
+      res.json(await updateAdminCoverageArea(String(req.params.coverageAreaId || ""), parsed));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.delete("/admin/coverage-areas/:coverageAreaId", async (req, res, next) => {
+    try {
+      res.json(await deleteAdminCoverageArea(String(req.params.coverageAreaId || "")));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/admin/coverage-areas/:coverageAreaId/regenerate", async (req, res, next) => {
+    try {
+      res.json(await regenerateAdminCoverageArea(String(req.params.coverageAreaId || "")));
     } catch (caught) {
       next(caught);
     }

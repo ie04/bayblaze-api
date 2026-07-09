@@ -256,6 +256,12 @@ PATCH  /v1/admin/accounts/:uid
 GET    /v1/admin/drivers/map
 GET    /v1/admin/drivers/routes
 POST   /v1/admin/isochrones
+GET    /v1/admin/coverage-areas
+POST   /v1/admin/coverage-areas
+PATCH  /v1/admin/coverage-areas/:coverageAreaId
+DELETE /v1/admin/coverage-areas/:coverageAreaId
+POST   /v1/admin/coverage-areas/:coverageAreaId/regenerate
+POST   /v1/admin/coverage-areas/regenerate-due
 GET    /v1/admin/promo-codes
 POST   /v1/admin/promo-codes
 PATCH  /v1/admin/promo-codes/:code
@@ -329,6 +335,12 @@ PATCH /v1/admin/accounts/:uid
 GET   /v1/admin/drivers/map
 GET   /v1/admin/drivers/routes
 POST  /v1/admin/isochrones
+GET   /v1/admin/coverage-areas
+POST  /v1/admin/coverage-areas
+PATCH /v1/admin/coverage-areas/:coverageAreaId
+DELETE /v1/admin/coverage-areas/:coverageAreaId
+POST  /v1/admin/coverage-areas/:coverageAreaId/regenerate
+POST  /v1/admin/coverage-areas/regenerate-due
 GET   /v1/admin/orders
 GET   /v1/admin/orders/:orderId
 ```
@@ -339,11 +351,22 @@ employee account with the `admin` role. The admin dashboard lives at
 Firebase, Firestore, Medusa, Google Maps, or service-token clients in browser
 code.
 
-`POST /v1/admin/isochrones` samples Google Routes round-trip duration from WH1
-or the requested origin across radial bearings and stores short-lived
-`coverage_isochrones` cache documents. It should return a route-duration
-polygon for the requested round-trip minute budget, not a simple geometric
-circle.
+Coverage areas are stored in `coverage_areas/{id}`. A coverage area is a
+polygonal bidirectional drive-time isochrone centered on a warehouse point:
+every accepted address must be inside the polygon when one exists, at most X
+minutes from the warehouse, and at most X minutes back to the warehouse. Zones
+may intersect; checkout resolves accepted destinations to the matching active
+zone with the shortest total bidirectional drive time and rejects destinations
+outside all active zones with `OUTSIDE_COVERAGE_AREA`. Coverage records include
+label, optional description, warehouse identity/address/location, max one-way
+drive minutes, generation speed, polygon granularity, active state, generated
+polygon/radius, and optional regeneration schedule metadata.
+
+`POST /v1/admin/isochrones` remains as a compatibility preview route, while
+coverage CRUD and regeneration use `/v1/admin/coverage-areas`. The
+`/v1/admin/coverage-areas/regenerate-due` route processes zones whose schedule
+metadata is due and should be called by an external scheduler if automatic
+production regeneration is needed.
 
 Additional account/admin environment variables:
 
