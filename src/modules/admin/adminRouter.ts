@@ -13,15 +13,18 @@ import {
   getAdminDriverMapState,
   getAdminDriverRoutes,
   listAdminCoverageAreas,
+  listAdminEmailAutomations,
   listAdminPromoCodes,
   regenerateAdminCoverageArea,
   regenerateDueAdminCoverageAreas,
   searchAdminAccounts,
+  sendAdminEmailAutomationTest,
   sendAdminOrderDetail,
   sendAdminOrderDelete,
   sendAdminOrders,
   updateAdminAccount,
   updateAdminCoverageArea,
+  updateAdminEmailAutomation,
   updateAdminPromoCode,
 } from "./adminService";
 
@@ -46,6 +49,8 @@ const isochroneSchema = z.object({
 });
 
 const promoCodeTypeSchema = z.enum(["discount", "bogo"]);
+const emailAutomationEventTypeSchema = z.enum(["order_placed"]);
+const emailRecipientModeSchema = z.enum(["customer", "internal", "both"]);
 
 const coverageAreaSchema = z.object({
   active: z.boolean().optional(),
@@ -107,6 +112,21 @@ const promoCodeUpdateSchema = z.object({
 
 const orderDeleteSchema = z.object({
   releaseStock: z.boolean().optional().default(false),
+});
+
+const emailAutomationUpdateSchema = z.object({
+  enabled: z.boolean().optional(),
+  fromEmail: z.string().optional(),
+  htmlTemplate: z.string().min(1).optional(),
+  internalRecipientEmails: z.array(z.string()).optional(),
+  recipientMode: emailRecipientModeSchema.optional(),
+  replyTo: z.string().optional(),
+  subjectTemplate: z.string().min(1).optional(),
+  textTemplate: z.string().min(1).optional(),
+});
+
+const emailAutomationTestSchema = z.object({
+  recipientEmail: z.string().min(1),
 });
 
 export function createAdminRouter() {
@@ -211,6 +231,34 @@ export function createAdminRouter() {
   router.get("/admin/promo-codes", async (_req, res, next) => {
     try {
       res.json(await listAdminPromoCodes());
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.get("/admin/email-automations", async (_req, res, next) => {
+    try {
+      res.json(await listAdminEmailAutomations());
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.patch("/admin/email-automations/:eventType", async (req, res, next) => {
+    try {
+      const eventType = emailAutomationEventTypeSchema.parse(String(req.params.eventType || ""));
+      const parsed = emailAutomationUpdateSchema.parse(req.body ?? {});
+      res.json(await updateAdminEmailAutomation(eventType, parsed));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/admin/email-automations/:eventType/test", async (req, res, next) => {
+    try {
+      const eventType = emailAutomationEventTypeSchema.parse(String(req.params.eventType || ""));
+      const parsed = emailAutomationTestSchema.parse(req.body ?? {});
+      res.json(await sendAdminEmailAutomationTest(eventType, parsed));
     } catch (caught) {
       next(caught);
     }

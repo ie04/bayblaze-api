@@ -44,6 +44,8 @@ const envSchema = z
     FIREBASE_WEB_API_KEY: z.string().optional(),
 
     RESEND_API_KEY: z.string().optional(),
+    AUTOMATED_EMAIL_FROM: z.string().optional(),
+    AUTOMATED_EMAIL_REPLY_TO: z.string().optional(),
     DRIVER_EMAIL_FROM: z.string().optional(),
     DRIVER_EMAIL_REPLY_TO: z.string().optional(),
     DRIVER_SIGNUP_CODE_TTL_MINUTES: z.coerce.number().int().positive().optional().default(15),

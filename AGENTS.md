@@ -266,6 +266,9 @@ GET    /v1/admin/promo-codes
 POST   /v1/admin/promo-codes
 PATCH  /v1/admin/promo-codes/:code
 DELETE /v1/admin/promo-codes/:code
+GET    /v1/admin/email-automations
+PATCH  /v1/admin/email-automations/:eventType
+POST   /v1/admin/email-automations/:eventType/test
 GET    /v1/admin/orders
 GET    /v1/admin/orders/:orderId
 DELETE /v1/admin/orders/:orderId
@@ -281,6 +284,15 @@ discount preview endpoints enforce that basket minimum against the before-tax
 product subtotal and return `eligible=false` with
 `ineligibilityReason="minimum_spend"`, `minimumSpendCents`, `subtotalCents`, and
 `amountNeededCents` when the basket is too small.
+
+Automated email settings live in Firestore `email_automations/{eventType}` and
+recent outcomes are recorded in `email_event_logs`. Admins configure them
+through `/v1/admin/email-automations`. Service-to-service triggers call
+`POST /v1/email/events` with either `BAYBLAZE_API_SERVICE_TOKEN` or
+`BAYBLAZE_MEDUSA_SERVICE_TOKEN`. The embedded Medusa `order.placed` subscriber
+posts an `order_placed` event to `bayblaze-api`; the API renders the configured
+template and sends through Resend using `AUTOMATED_EMAIL_FROM`, falling back to
+`DRIVER_EMAIL_FROM` when no automation-level from-address is set.
 
 Customer storefront account routes:
 

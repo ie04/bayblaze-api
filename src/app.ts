@@ -10,6 +10,7 @@ import { createAdminRouter } from "./modules/admin/adminRouter";
 import { createCheckoutBridgeRouter } from "./modules/checkout/checkoutBridgeRouter";
 import { createDriverBridgeRouter } from "./modules/drivers/driverBridgeRouter";
 import { createDriverWorkflowRouter } from "./modules/drivers/driverWorkflowRouter";
+import { createEmailAutomationRouter } from "./modules/email/emailAutomationRouter";
 import { createInventoryBridgeRouter } from "./modules/inventory/inventoryBridgeRouter";
 import { IsochronosRequestError } from "./modules/isochronos/googleMapsService";
 import { createOrderBridgeRouter } from "./modules/orders/orderBridgeRouter";
@@ -62,6 +63,7 @@ export function createApp() {
   app.use("/v1", createOrderBridgeRouter());
   app.use("/v1", createDriverBridgeRouter());
   app.use("/v1", createDriverWorkflowRouter());
+  app.use("/v1", createEmailAutomationRouter());
   app.use("/v1", createWinRewardRouter());
 
   app.use((_req, res) => {

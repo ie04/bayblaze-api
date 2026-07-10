@@ -16,6 +16,14 @@ import {
   updateCoverageArea,
   type CoverageAreaInput,
 } from "../isochronos/coverageAreaService";
+import {
+  listEmailAutomations,
+  sendEmailAutomationTest,
+  updateEmailAutomation,
+  type EmailAutomationEventType,
+  type EmailAutomationTestInput,
+  type EmailAutomationUpdateInput,
+} from "../email/emailAutomationService";
 import { geocodeAddress } from "../isochronos/googleMapsService";
 import type { Response as ExpressResponse } from "express";
 
@@ -308,6 +316,18 @@ export function regenerateAdminCoverageArea(id: string) {
 
 export function regenerateDueAdminCoverageAreas() {
   return regenerateDueCoverageAreas();
+}
+
+export function listAdminEmailAutomations() {
+  return listEmailAutomations();
+}
+
+export function updateAdminEmailAutomation(eventType: EmailAutomationEventType, input: EmailAutomationUpdateInput) {
+  return updateEmailAutomation(eventType, input);
+}
+
+export function sendAdminEmailAutomationTest(eventType: EmailAutomationEventType, input: EmailAutomationTestInput) {
+  return sendEmailAutomationTest(eventType, input);
 }
 
 export async function createAdminIsochronePlot(input: {

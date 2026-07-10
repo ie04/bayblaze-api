@@ -124,14 +124,6 @@ export default async function bayblazePrintOrderLabelHandler({
 }: SubscriberArgs<{ id: string }>) {
   const logger = container.resolve(ContainerRegistrationKeys.LOGGER);
   const labelPrinterUrl = getLabelPrinterAgentUrl();
-
-  if (!labelPrinterUrl) {
-    logger.warn(
-      "[BayBlaze Label Printer] LABEL_PRINTER_AGENT_URL is not configured; skipping delivery label print.",
-    );
-    return;
-  }
-
   const orderId = data.id;
 
   if (!orderId) {
@@ -159,19 +151,27 @@ export default async function bayblazePrintOrderLabelHandler({
       return;
     }
 
-    await submitPrintJob({
-      job: toLabelPrintJob(order),
-      labelPrinterUrl,
-      logger,
-      name: "delivery label",
-    });
+    await notifyBayblazeEmailAutomation(order, logger);
 
-    await submitPrintJob({
-      job: toInvoicePrintJob(order),
-      labelPrinterUrl,
-      logger,
-      name: "invoice",
-    });
+    if (!labelPrinterUrl) {
+      logger.warn(
+        "[BayBlaze Label Printer] LABEL_PRINTER_AGENT_URL is not configured; skipping delivery label print.",
+      );
+    } else {
+      await submitPrintJob({
+        job: toLabelPrintJob(order),
+        labelPrinterUrl,
+        logger,
+        name: "delivery label",
+      });
+
+      await submitPrintJob({
+        job: toInvoicePrintJob(order),
+        labelPrinterUrl,
+        logger,
+        name: "invoice",
+      });
+    }
   } catch (error) {
     logger.error(
       `[BayBlaze Label Printer] Could not submit print job for order ${orderId}: ${
@@ -225,6 +225,71 @@ async function submitPrintJob({
       }`,
     );
   }
+}
+
+async function notifyBayblazeEmailAutomation(
+  order: BayblazeOrder,
+  logger: {
+    error: (message: string) => void;
+    info: (message: string) => void;
+    warn: (message: string) => void;
+  },
+) {
+  const apiUrl = getBayblazeApiUrl();
+  const serviceToken = getBayblazeApiServiceToken();
+
+  if (!apiUrl || !serviceToken) {
+    logger.warn(
+      "[BayBlaze Email Automation] BAYBLAZE_API_URL or BAYBLAZE_MEDUSA_SERVICE_TOKEN is not configured; skipping order email event.",
+    );
+    return;
+  }
+
+  try {
+    const response = await fetch(`${apiUrl}/v1/email/events`, {
+      body: JSON.stringify({
+        eventId: `order_placed:${order.id}`,
+        eventType: "order_placed",
+        order: toEmailAutomationOrder(order),
+      }),
+      headers: {
+        "content-type": "application/json",
+        "x-bayblaze-service-token": serviceToken,
+      },
+      method: "POST",
+    });
+    const responseBody = await response.text().catch(() => "");
+
+    if (!response.ok) {
+      logger.error(
+        `[BayBlaze Email Automation] order_placed event failed for ${getOrderNumber(order)}: ${response.status} ${response.statusText} ${responseBody}`,
+      );
+      return;
+    }
+
+    logger.info(
+      `[BayBlaze Email Automation] Submitted order_placed event for ${getOrderNumber(order)}.`,
+    );
+  } catch (error) {
+    logger.error(
+      `[BayBlaze Email Automation] Could not submit order_placed event for ${getOrderNumber(order)}: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+}
+
+function toEmailAutomationOrder(order: BayblazeOrder) {
+  return {
+    custom_display_id: order.custom_display_id,
+    display_id: order.display_id,
+    email: order.email,
+    id: order.id,
+    metadata: order.metadata ?? {},
+    orderReference: getOrderNumber(order),
+    shipping_address: order.shipping_address ?? {},
+    total: order.total,
+  };
 }
 
 function toLabelPrintJob(order: BayblazeOrder): LabelPrintJob {
@@ -474,6 +539,14 @@ function getLabelPrinterAgentUrl() {
     process.env.LABEL_AGENT_URL?.trim() ||
     ""
   ).replace(/\/$/, "");
+}
+
+function getBayblazeApiUrl() {
+  return (process.env.BAYBLAZE_API_URL || "http://bayblaze-api:3040").replace(/\/$/, "");
+}
+
+function getBayblazeApiServiceToken() {
+  return process.env.BAYBLAZE_MEDUSA_SERVICE_TOKEN?.trim();
 }
 
 function getLabelPrinterHeaders() {

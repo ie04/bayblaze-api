@@ -137,6 +137,13 @@ partitioning, and Google Maps usage guardrails.
   `MEDUSA_ADMIN_ORDERS_PATH=/admin/bayblaze/orders`; do not point it at native
   `/admin/orders` unless the API is changed to use a real Medusa admin auth
   flow.
+- The embedded Medusa `order.placed` subscriber posts an `order_placed` email
+  automation event to `bayblaze-api` at `POST /v1/email/events` using
+  `BAYBLAZE_MEDUSA_SERVICE_TOKEN`. It defaults to
+  `http://bayblaze-api:3040` inside the consolidated Compose network unless
+  `BAYBLAZE_API_URL` is set. This email event must run independently of label
+  printing; missing `LABEL_PRINTER_AGENT_URL` should not prevent the email
+  trigger.
 - Customer cancellation also uses `/admin/bayblaze/orders/{orderId}` via POST
   from `bayblaze-api`. It must restore each ordered variant's
   `availableQuantity` metadata and Medusa inventory level from the order item
