@@ -1,0 +1,480 @@
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
+
+import { getBayblazeFirestore } from "../../clients/firebaseAdminClient";
+import { ApiRequestError } from "../drivers/driverWorkflowService";
+
+export const discountCodesCollection = "customer_discount_codes";
+export const adminPromoCodeCategory = "admin_promo";
+export const winReferralCodeCategory = "win_referral";
+
+export type DiscountCodeCategory =
+  | typeof adminPromoCodeCategory
+  | typeof winReferralCodeCategory;
+
+export type DiscountCodeType = "discount" | "bogo";
+
+export type DiscountCodeInput = {
+  bogoBuyQuantity?: number;
+  bogoFreeQuantity?: number;
+  campaign?: string;
+  category: DiscountCodeCategory;
+  code: string;
+  codeType?: DiscountCodeType;
+  discountPercent?: number;
+  minimumSpendCents?: number;
+  ownerUid?: string;
+  referralCode?: string;
+  rewardId?: string;
+  status?: string;
+  uid?: string;
+  usageLimit?: number;
+  usedCount?: number;
+};
+
+export type DiscountCodeUpdateInput = {
+  bogoBuyQuantity?: number;
+  bogoFreeQuantity?: number;
+  code?: string;
+  codeType?: DiscountCodeType;
+  discountPercent?: number;
+  minimumSpendCents?: number;
+};
+
+export type DiscountCodePreviewInput = {
+  code: string;
+  items?: PreviewDiscountItem[];
+  subtotalCents?: number;
+};
+
+export type PreviewDiscountItem = {
+  quantity?: number;
+  unitPriceCents?: number;
+};
+
+export async function listDiscountCodes(categories: DiscountCodeCategory[]) {
+  const firestore = getBayblazeFirestore();
+  const snapshots = await Promise.all(
+    categories.map((category) =>
+      firestore.collection(discountCodesCollection).where("category", "==", category).get(),
+    ),
+  );
+  const discountCodes = snapshots
+    .flatMap((snapshot) => snapshot.docs)
+    .map((doc) => serializeDiscountCode(doc.id, doc.data()))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+
+  return discountCodes;
+}
+
+export async function createDiscountCode(input: DiscountCodeInput) {
+  const code = normalizeDiscountCode(input.code);
+
+  if (!code) {
+    throw new ApiRequestError(400, "Promo code is required.");
+  }
+
+  const ref = getBayblazeFirestore().collection(discountCodesCollection).doc(code);
+  const existing = await ref.get();
+
+  if (existing.exists) {
+    throw new ApiRequestError(409, "That promo code already exists.");
+  }
+
+  const record = buildDiscountCodeRecord(input);
+  await ref.set(record);
+
+  return serializeDiscountCode(code, {
+    ...record,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function updateDiscountCode(
+  currentCode: string,
+  input: DiscountCodeUpdateInput,
+  options: { category: DiscountCodeCategory },
+) {
+  const code = normalizeDiscountCode(currentCode);
+
+  if (!code) {
+    throw new ApiRequestError(400, "Promo code is required.");
+  }
+
+  const nextCode = input.code === undefined ? code : normalizeDiscountCode(input.code);
+
+  if (!nextCode) {
+    throw new ApiRequestError(400, "Promo code is required.");
+  }
+
+  const firestore = getBayblazeFirestore();
+  const currentRef = firestore.collection(discountCodesCollection).doc(code);
+  const nextRef = firestore.collection(discountCodesCollection).doc(nextCode);
+
+  return firestore.runTransaction(async (transaction) => {
+    const currentSnapshot = await transaction.get(currentRef);
+
+    if (!currentSnapshot.exists) {
+      throw new ApiRequestError(404, "That promo code was not found.");
+    }
+
+    const currentData = currentSnapshot.data() ?? {};
+
+    if (readString(currentData.category) !== options.category) {
+      throw new ApiRequestError(409, "That promo code is not managed by this promo tool.");
+    }
+
+    if (nextCode !== code) {
+      const nextSnapshot = await transaction.get(nextRef);
+
+      if (nextSnapshot.exists) {
+        throw new ApiRequestError(409, "That promo code already exists.");
+      }
+    }
+
+    const nextCodeType = input.codeType === undefined
+      ? normalizeDiscountCodeType(currentData.codeType)
+      : normalizeDiscountCodeType(input.codeType);
+    const nextDiscountPercent = input.discountPercent === undefined
+      ? readDiscountPercent(currentData.discountPercent, nextCodeType)
+      : normalizeDiscountPercentForType(input.discountPercent, nextCodeType);
+    const nextMinimumSpendCents = input.minimumSpendCents === undefined
+      ? normalizeInteger(currentData.minimumSpendCents)
+      : normalizeMinimumSpendCents(input.minimumSpendCents);
+    const nextData = removeUndefinedValues({
+      ...currentData,
+      code: nextCode,
+      codeType: nextCodeType,
+      discountPercent: nextDiscountPercent,
+      minimumSpendCents: nextMinimumSpendCents,
+      ...(nextCodeType === "bogo" ? { bogoBuyQuantity: 1, bogoFreeQuantity: 1 } : {}),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    if (nextCode !== code) {
+      transaction.set(nextRef, nextData);
+      transaction.delete(currentRef);
+    } else {
+      transaction.set(currentRef, nextData, { merge: true });
+    }
+
+    return serializeDiscountCode(nextCode, {
+      ...nextData,
+      updatedAt: new Date().toISOString(),
+    });
+  });
+}
+
+export async function deleteDiscountCode(
+  codeInput: string,
+  options: { category: DiscountCodeCategory },
+) {
+  const code = normalizeDiscountCode(codeInput);
+
+  if (!code) {
+    throw new ApiRequestError(400, "Promo code is required.");
+  }
+
+  const ref = getBayblazeFirestore().collection(discountCodesCollection).doc(code);
+  const snapshot = await ref.get();
+
+  if (!snapshot.exists) {
+    throw new ApiRequestError(404, "That promo code was not found.");
+  }
+
+  const data = snapshot.data() ?? {};
+
+  if (readString(data.category) !== options.category) {
+    throw new ApiRequestError(409, "That promo code is not managed by this promo tool.");
+  }
+
+  await ref.delete();
+}
+
+export async function previewDiscountCode(
+  input: DiscountCodePreviewInput,
+  options: { categories?: DiscountCodeCategory[] } = {},
+) {
+  const code = normalizeDiscountCode(input.code);
+  const categories = options.categories ?? [adminPromoCodeCategory, winReferralCodeCategory];
+  const hasSubtotal = input.subtotalCents !== undefined;
+  const subtotalCents = normalizeMoneyCents(input.subtotalCents);
+
+  if (!code) {
+    throw new ApiRequestError(400, "Promo code is required.");
+  }
+
+  const snapshot = await getBayblazeFirestore().collection(discountCodesCollection).doc(code).get();
+
+  if (!snapshot.exists) {
+    throw new ApiRequestError(404, "That promo code was not found.");
+  }
+
+  const discountCode = serializeDiscountCode(snapshot.id, snapshot.data() ?? {});
+
+  if (!categories.includes(discountCode.category)) {
+    throw new ApiRequestError(409, "That promo code is not available for checkout.");
+  }
+
+  if (discountCode.status === "used" || discountCode.usedCount >= discountCode.usageLimit) {
+    throw new ApiRequestError(409, "That promo code has already been used.");
+  }
+
+  if (discountCode.codeType === "discount" && discountCode.discountPercent <= 0) {
+    throw new ApiRequestError(409, "That promo code is not configured correctly.");
+  }
+
+  if (hasSubtotal && discountCode.minimumSpendCents > subtotalCents) {
+    return {
+      amountNeededCents: discountCode.minimumSpendCents - subtotalCents,
+      bogoBuyQuantity: discountCode.codeType === "bogo" ? 1 : 0,
+      bogoDiscountedQuantity: 0,
+      bogoFreeQuantity: discountCode.codeType === "bogo" ? 1 : 0,
+      category: discountCode.category,
+      code: discountCode.code,
+      codeType: discountCode.codeType,
+      discountAmountCents: 0,
+      discountPercent: discountCode.discountPercent,
+      eligible: false,
+      ineligibilityReason: "minimum_spend",
+      message: `That promo code requires at least ${formatCents(discountCode.minimumSpendCents)} in products.`,
+      minimumSpendCents: discountCode.minimumSpendCents,
+      ownerUid: discountCode.ownerUid,
+      subtotalCents,
+      usageLimit: discountCode.usageLimit,
+      usedCount: discountCode.usedCount,
+    };
+  }
+
+  const previewItems = normalizePreviewDiscountItems(input.items);
+  const bogoDiscount = discountCode.codeType === "bogo"
+    ? calculateBogoDiscountCents(previewItems, subtotalCents)
+    : { amountCents: 0, discountedQuantity: 0 };
+  const discountAmountCents = discountCode.codeType === "bogo"
+    ? Math.min(subtotalCents, bogoDiscount.amountCents)
+    : subtotalCents > 0
+      ? Math.min(subtotalCents, Math.round(subtotalCents * (discountCode.discountPercent / 100)))
+      : 0;
+
+  return {
+    bogoBuyQuantity: discountCode.codeType === "bogo" ? 1 : 0,
+    bogoDiscountedQuantity: bogoDiscount.discountedQuantity,
+    bogoFreeQuantity: discountCode.codeType === "bogo" ? 1 : 0,
+    category: discountCode.category,
+    code: discountCode.code,
+    codeType: discountCode.codeType,
+    discountAmountCents,
+    discountPercent: discountCode.discountPercent,
+    eligible: true,
+    minimumSpendCents: discountCode.minimumSpendCents,
+    ownerUid: discountCode.ownerUid,
+    subtotalCents,
+    usageLimit: discountCode.usageLimit,
+    usedCount: discountCode.usedCount,
+  };
+}
+
+export function buildDiscountCodeRecord(input: DiscountCodeInput) {
+  const code = normalizeDiscountCode(input.code);
+  const codeType = normalizeDiscountCodeType(input.codeType);
+  const discountPercent = normalizeDiscountPercentForType(input.discountPercent, codeType);
+  const usageLimit = normalizeInteger(input.usageLimit) || 1;
+
+  return removeUndefinedValues({
+    bogoBuyQuantity: codeType === "bogo" ? input.bogoBuyQuantity ?? 1 : undefined,
+    bogoFreeQuantity: codeType === "bogo" ? input.bogoFreeQuantity ?? 1 : undefined,
+    campaign: normalizeToken(input.campaign) || undefined,
+    category: input.category,
+    code,
+    codeType,
+    discountPercent,
+    minimumSpendCents: normalizeMinimumSpendCents(input.minimumSpendCents),
+    ownerUid: readString(input.ownerUid) || undefined,
+    referralCode: normalizeDiscountCode(input.referralCode) || undefined,
+    rewardId: readString(input.rewardId) || undefined,
+    status: readString(input.status) || "active",
+    uid: readString(input.uid) || undefined,
+    usageLimit,
+    usedCount: normalizeInteger(input.usedCount),
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+}
+
+export function serializeDiscountCode(id: string, data: Record<string, unknown>) {
+  const codeType = normalizeDiscountCodeType(data.codeType);
+  const category = normalizeDiscountCodeCategory(data.category);
+
+  return {
+    campaign: normalizeToken(data.campaign),
+    category,
+    code: normalizeDiscountCode(data.code) || normalizeDiscountCode(id),
+    codeType,
+    discountPercent: readDiscountPercent(data.discountPercent, codeType),
+    minimumSpendCents: normalizeInteger(data.minimumSpendCents),
+    ownerUid: readString(data.ownerUid) || readString(data.uid),
+    referralCode: normalizeDiscountCode(data.referralCode),
+    rewardId: readString(data.rewardId),
+    status: readString(data.status) || "active",
+    uid: readString(data.uid),
+    usageLimit: normalizeInteger(data.usageLimit) || 1,
+    usedCount: normalizeInteger(data.usedCount),
+    createdAt: serializeTimestamp(data.createdAt),
+    updatedAt: serializeTimestamp(data.updatedAt),
+  };
+}
+
+export function normalizeDiscountCode(value: unknown) {
+  return readString(value)
+    .replace(/[^a-zA-Z0-9_-]/g, "")
+    .slice(0, 80)
+    .toUpperCase();
+}
+
+export function normalizeDiscountCodeType(value: unknown): DiscountCodeType {
+  return value === "bogo" ? "bogo" : "discount";
+}
+
+export function normalizeDiscountPercentForType(value: unknown, codeType: DiscountCodeType) {
+  if (codeType === "bogo") {
+    return 0;
+  }
+
+  return normalizeDiscountPercent(value);
+}
+
+export function normalizeMinimumSpendCents(value: unknown) {
+  const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+
+  if (!Number.isFinite(number) || number <= 0) {
+    return 0;
+  }
+
+  if (!Number.isInteger(number)) {
+    throw new ApiRequestError(400, "Minimum basket size must be a whole cent amount.");
+  }
+
+  return Math.min(number, 1_000_000_00);
+}
+
+export function normalizeInteger(value: unknown) {
+  const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+
+  return Number.isInteger(number) && number >= 0 ? number : 0;
+}
+
+export function readString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+export function removeUndefinedValues<T extends Record<string, unknown>>(value: T) {
+  return Object.fromEntries(Object.entries(value).filter((entry) => entry[1] !== undefined)) as T;
+}
+
+function normalizeDiscountCodeCategory(value: unknown): DiscountCodeCategory {
+  return value === winReferralCodeCategory ? winReferralCodeCategory : adminPromoCodeCategory;
+}
+
+function normalizeDiscountPercent(value: unknown) {
+  const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+
+  if (!Number.isFinite(number) || number <= 0 || number > 100) {
+    throw new ApiRequestError(400, "Discount percent must be between 1 and 100.");
+  }
+
+  return Math.round(number * 100) / 100;
+}
+
+function readDiscountPercent(value: unknown, codeType: DiscountCodeType) {
+  if (codeType === "bogo") {
+    return 0;
+  }
+
+  const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+
+  return Number.isFinite(number) && number > 0 && number <= 100
+    ? Math.round(number * 100) / 100
+    : 30;
+}
+
+function normalizeMoneyCents(value: unknown) {
+  const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+
+  return Number.isInteger(number) && number >= 0 ? number : 0;
+}
+
+function normalizePreviewDiscountItems(value: unknown): Array<{ quantity: number; unitPriceCents: number }> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") {
+        return null;
+      }
+
+      const quantity = normalizeInteger((item as PreviewDiscountItem).quantity);
+      const unitPriceCents = normalizeMoneyCents((item as PreviewDiscountItem).unitPriceCents);
+
+      if (quantity <= 0 || unitPriceCents <= 0) {
+        return null;
+      }
+
+      return { quantity, unitPriceCents };
+    })
+    .filter((item): item is { quantity: number; unitPriceCents: number } => item !== null);
+}
+
+function calculateBogoDiscountCents(
+  items: Array<{ quantity: number; unitPriceCents: number }>,
+  subtotalCents: number,
+) {
+  const unitPrices = items.flatMap((item) =>
+    Array.from({ length: item.quantity }, () => item.unitPriceCents),
+  );
+
+  if (!unitPrices.length) {
+    return {
+      amountCents: Math.floor(subtotalCents / 2),
+      discountedQuantity: subtotalCents > 0 ? 1 : 0,
+    };
+  }
+
+  const discountedQuantity = Math.floor(unitPrices.length / 2);
+
+  if (discountedQuantity <= 0) {
+    return { amountCents: 0, discountedQuantity: 0 };
+  }
+
+  unitPrices.sort((left, right) => left - right);
+
+  return {
+    amountCents: unitPrices.slice(0, discountedQuantity).reduce((total, price) => total + price, 0),
+    discountedQuantity,
+  };
+}
+
+function normalizeToken(value: unknown) {
+  return readString(value).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80);
+}
+
+function formatCents(cents: number) {
+  return new Intl.NumberFormat("en-US", { currency: "USD", style: "currency" }).format(cents / 100);
+}
+
+function serializeTimestamp(value: unknown) {
+  if (value instanceof Timestamp) {
+    return value.toDate().toISOString();
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return "";
+}

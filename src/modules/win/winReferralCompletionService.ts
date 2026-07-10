@@ -3,13 +3,16 @@ import { randomBytes } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 
 import { getBayblazeFirestore } from "../../clients/firebaseAdminClient";
+import {
+  discountCodesCollection,
+  normalizeDiscountCode,
+  winReferralCodeCategory,
+} from "../discountCodes/discountCodeService";
 import { ApiRequestError } from "../drivers/driverWorkflowService";
 
 const winRewardsCollection = "customer_win_rewards";
 const referralCodeIndexCollection = "customer_win_referral_codes";
-const discountCodesCollection = "customer_discount_codes";
 const orderCompletionsCollection = "customer_win_order_completions";
-const discountCodeCategory = "win_referral";
 const usageLimit = 1;
 
 type CompleteWinReferralInput = {
@@ -92,7 +95,7 @@ export async function completeWinReferral(input: CompleteWinReferralInput) {
 
     const now = FieldValue.serverTimestamp();
     const completionRecord = removeUndefinedValues({
-      category: discountCodeCategory,
+      category: winReferralCodeCategory,
       claimToken,
       completedAt: now,
       completedCustomerEmail: completedCustomerEmail || undefined,
@@ -106,7 +109,7 @@ export async function completeWinReferral(input: CompleteWinReferralInput) {
       updatedAt: now,
     });
     const usageRecord = removeUndefinedValues({
-      category: discountCodeCategory,
+      category: winReferralCodeCategory,
       code: referralCode,
       codeType: "discount",
       completedCustomerEmail: completedCustomerEmail || undefined,
@@ -155,10 +158,7 @@ export async function completeWinReferral(input: CompleteWinReferralInput) {
 }
 
 function normalizeReferralCode(value: unknown) {
-  return readString(value)
-    .replace(/[^a-zA-Z0-9_-]/g, "")
-    .slice(0, 80)
-    .toUpperCase();
+  return normalizeDiscountCode(value);
 }
 
 function readString(value: unknown) {

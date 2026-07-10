@@ -274,11 +274,16 @@ GET    /v1/admin/orders/:orderId
 DELETE /v1/admin/orders/:orderId
 ```
 
-Admin-created storefront promo codes are stored in
-`customer_discount_codes/{CODE}` with `category: "admin_promo"`. The public and
-customer discount preview endpoints accept both legacy `win_referral` discount
-records and `admin_promo` records; the admin dashboard is the only browser app
-that may create, update, or delete admin promo records.
+Storefront promo codes share the API-owned discount code module in
+`src/modules/discountCodes/discountCodeService.ts` and Firestore collection
+`customer_discount_codes/{CODE}`. Admin-created promo records use
+`category: "admin_promo"`; BayBlaze Win friend-code records use
+`category: "win_referral"`. `GET /v1/admin/promo-codes` returns both categories
+as the same serialized discount-code object so operators can see centralized
+promo usage, but only `admin_promo` records may be created, updated, or deleted
+through the admin routes.
+The public and customer discount preview endpoints accept both `win_referral`
+discount records and `admin_promo` records.
 Admin promo records may set `minimumSpendCents`; `0` disables the minimum. The
 discount preview endpoints enforce that basket minimum against the before-tax
 product subtotal and return `eligible=false` with
@@ -315,13 +320,15 @@ native Medusa email/password registration directly.
 
 BayBlaze Win discount/referral codes are owned by `bayblaze-api`. When a
 customer starts the win flow, the API creates a customer-scoped reward document,
-a win-specific referral index, and a categorized `customer_discount_codes/{code}`
-ledger entry with `category=win_referral`, `ownerUid`, `usageLimit=1`, and
-`usedCount=0`. Completion through `POST /v1/win/referrals/complete` must run in
-a Firestore transaction, mark the code used, tie it to the qualifying order, and
-reject any later order for the same code. Do not rely on a storefront-only or
-Medusa-only discount code as the source of truth for one-time win reward
-qualification.
+a win-specific referral index, and a shared `customer_discount_codes/{code}`
+record built through the common discount-code service with
+`category=win_referral`, `ownerUid`, `usageLimit=1`, and `usedCount=0`. Win
+friend-code generation must check both the win referral index and centralized
+discount-code collection for collisions. Completion through
+`POST /v1/win/referrals/complete` must run in a Firestore transaction, mark the
+central code used, tie it to the qualifying order, and reject any later order
+for the same code. Do not rely on a storefront-only or Medusa-only discount code
+as the source of truth for one-time win reward qualification.
 Customer checkout promo savings can be previewed without sign-in through
 `POST /v1/discount-codes/preview`, which validates code existence, status,
 one-time usage, and minimum spend without exposing owner identity. Final

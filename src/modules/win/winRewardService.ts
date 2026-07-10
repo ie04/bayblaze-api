@@ -5,28 +5,30 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { forwardInventoryRequest } from "../../clients/medusaInventoryClient";
 import { getBayblazeFirestore } from "../../clients/firebaseAdminClient";
 import { env } from "../../config/env";
+import {
+  buildDiscountCodeRecord,
+  discountCodesCollection,
+  normalizeDiscountCode,
+  previewDiscountCode as previewSharedDiscountCode,
+  type PreviewDiscountItem,
+  winReferralCodeCategory,
+} from "../discountCodes/discountCodeService";
 import { ApiRequestError } from "../drivers/driverWorkflowService";
 import type { FreebieProduct, WinRewardRecord, WinRewardStatus } from "./winTypes";
 
 const winRewardsCollection = "customer_win_rewards";
 const referralCodeIndexCollection = "customer_win_referral_codes";
-const discountCodesCollection = "customer_discount_codes";
 const orderCompletionsCollection = "customer_win_order_completions";
 const defaultCampaign = "nfc-free-vape";
 const defaultSource = "nfc-mailer";
-const discountCodeCategory = "win_referral";
-const adminPromoCodeCategory = "admin_promo";
 const discountPercent = 20;
 const minimumSpendCents = 2000;
 const usageLimit = 1;
 const maxFreebieProducts = 48;
 
-type PromoCodeType = "discount" | "bogo";
-
 type WinContext = { campaign?: string; nfcTagId?: string; source?: string };
 type ClaimFreebieInput = { campaign?: string; claimToken?: string; productId: string; variantId?: string };
 type PreviewCustomerDiscountCodeInput = { code: string; items?: PreviewDiscountItem[]; subtotalCents?: number };
-type PreviewDiscountItem = { quantity?: number; unitPriceCents?: number };
 
 type InventorySnapshot = { products?: InventoryProduct[] };
 type InventoryProduct = {
@@ -52,15 +54,25 @@ export async function startCustomerWinReward(uid: string, context: WinContext) {
   const referralCode = await createUniqueReferralCode(uid, normalizedContext.campaign);
   const now = FieldValue.serverTimestamp();
   const reward: WinRewardRecord = {
-    campaign: normalizedContext.campaign, discountCodeCategory, discountCodeId: referralCode, discountPercent, minimumSpendCents,
+    campaign: normalizedContext.campaign, discountCodeCategory: winReferralCodeCategory, discountCodeId: referralCode, discountPercent, minimumSpendCents,
     nfcTagId: normalizedContext.nfcTagId, referralCode, referralUrl: buildReferralUrl(referralCode), source: normalizedContext.source,
     status: "waiting_for_friend_order", uid, createdAt: now, updatedAt: now,
   };
-  const codeRecord = {
-    campaign: normalizedContext.campaign, category: discountCodeCategory, code: referralCode, codeType: "discount", discountPercent,
-    minimumSpendCents, ownerUid: uid, referralCode, rewardId: ref.id, status: "active", uid, usageLimit, usedCount: 0,
-    createdAt: now, updatedAt: now,
-  };
+  const codeRecord = buildDiscountCodeRecord({
+    campaign: normalizedContext.campaign,
+    category: winReferralCodeCategory,
+    code: referralCode,
+    codeType: "discount",
+    discountPercent,
+    minimumSpendCents,
+    ownerUid: uid,
+    referralCode,
+    rewardId: ref.id,
+    status: "active",
+    uid,
+    usageLimit,
+    usedCount: 0,
+  });
   await ref.set(reward);
   await getBayblazeFirestore().collection(referralCodeIndexCollection).doc(referralCode).set(codeRecord);
   await getBayblazeFirestore().collection(discountCodesCollection).doc(referralCode).set(codeRecord);
@@ -98,73 +110,14 @@ export async function claimCustomerWinFreebie(uid: string, input: ClaimFreebieIn
 }
 
 export async function previewCustomerDiscountCode(uid: string, input: PreviewCustomerDiscountCodeInput) {
-  const preview = await previewDiscountCode(input);
+  const preview = await previewSharedDiscountCode(input);
   if (preview.ownerUid && preview.ownerUid === uid) throw new ApiRequestError(409, "Send this friend code to someone else to unlock your freebie.");
   return preview;
 }
 
 export async function previewPublicDiscountCode(input: PreviewCustomerDiscountCodeInput) {
-  const { ownerUid: _ownerUid, ...preview } = await previewDiscountCode(input);
+  const { ownerUid: _ownerUid, ...preview } = await previewSharedDiscountCode(input);
   return preview;
-}
-
-async function previewDiscountCode(input: PreviewCustomerDiscountCodeInput) {
-  const code = normalizeReferralCode(input.code);
-  const hasSubtotal = input.subtotalCents !== undefined;
-  const subtotalCents = normalizeMoneyCents(input.subtotalCents);
-  if (!code) throw new ApiRequestError(400, "Promo code is required.");
-  const snapshot = await getBayblazeFirestore().collection(discountCodesCollection).doc(code).get();
-  if (!snapshot.exists) throw new ApiRequestError(404, "That promo code was not found.");
-
-  const discountCode = snapshot.data() ?? {};
-  const category = readString(discountCode.category);
-  const ownerUid = readString(discountCode.ownerUid) || readString(discountCode.uid);
-  const storedCode = normalizeReferralCode(discountCode.code) || code;
-  const codeType = readPromoCodeType(discountCode.codeType);
-  const storedUsageLimit = readInteger(discountCode.usageLimit) || usageLimit;
-  const usedCount = readInteger(discountCode.usedCount);
-  const storedDiscountPercent = codeType === "discount" ? readNumber(discountCode.discountPercent) : 50;
-  const storedMinimumSpendCents = readInteger(discountCode.minimumSpendCents);
-  const status = readString(discountCode.status) || "active";
-
-  if (category !== discountCodeCategory && category !== adminPromoCodeCategory) throw new ApiRequestError(409, "That promo code is not available for checkout.");
-  if (status === "used" || usedCount >= storedUsageLimit) throw new ApiRequestError(409, "That promo code has already been used.");
-  if (codeType === "discount" && storedDiscountPercent <= 0) throw new ApiRequestError(409, "That promo code is not configured correctly.");
-  if (hasSubtotal && storedMinimumSpendCents > subtotalCents) {
-    return {
-      amountNeededCents: storedMinimumSpendCents - subtotalCents,
-      bogoBuyQuantity: codeType === "bogo" ? 1 : 0,
-      bogoDiscountedQuantity: 0,
-      bogoFreeQuantity: codeType === "bogo" ? 1 : 0,
-      category,
-      code: storedCode,
-      codeType,
-      discountAmountCents: 0,
-      discountPercent: storedDiscountPercent,
-      eligible: false,
-      ineligibilityReason: "minimum_spend",
-      message: `That promo code requires at least ${formatCents(storedMinimumSpendCents)} in products.`,
-      minimumSpendCents: storedMinimumSpendCents,
-      ownerUid,
-      subtotalCents,
-      usageLimit: storedUsageLimit,
-      usedCount,
-    };
-  }
-
-  const previewItems = normalizePreviewDiscountItems(input.items);
-  const bogoDiscount = codeType === "bogo" ? calculateBogoDiscountCents(previewItems, subtotalCents) : { amountCents: 0, discountedQuantity: 0 };
-  const discountAmountCents = codeType === "bogo"
-    ? Math.min(subtotalCents, bogoDiscount.amountCents)
-    : subtotalCents > 0 ? Math.min(subtotalCents, Math.round(subtotalCents * (storedDiscountPercent / 100))) : 0;
-
-  return {
-    bogoBuyQuantity: codeType === "bogo" ? 1 : 0,
-    bogoDiscountedQuantity: bogoDiscount.discountedQuantity,
-    bogoFreeQuantity: codeType === "bogo" ? 1 : 0,
-    category, code: storedCode, codeType, discountAmountCents, discountPercent: storedDiscountPercent, eligible: true,
-    minimumSpendCents: storedMinimumSpendCents, ownerUid, subtotalCents, usageLimit: storedUsageLimit, usedCount,
-  };
 }
 
 async function refreshRewardQualification(reward: WinRewardRecord) {
@@ -185,8 +138,11 @@ async function createUniqueReferralCode(uid: string, campaign: string) {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const suffix = attempt === 0 ? stable : randomBytes(4).toString("hex").slice(0, 5).toUpperCase();
     const code = `${prefix}-${suffix}`;
-    const existing = await firestore.collection(referralCodeIndexCollection).doc(code).get();
-    if (!existing.exists) return code;
+    const [indexSnapshot, discountCodeSnapshot] = await Promise.all([
+      firestore.collection(referralCodeIndexCollection).doc(code).get(),
+      firestore.collection(discountCodesCollection).doc(code).get(),
+    ]);
+    if (!indexSnapshot.exists && !discountCodeSnapshot.exists) return code;
   }
   throw new ApiRequestError(409, "Could not generate a unique BayBlaze friend code.");
 }
@@ -199,13 +155,31 @@ async function ensureDiscountCodeRecord(reward: WinRewardRecord) {
   const discountCodeSnapshot = await discountCodeRef.get();
   if (discountCodeSnapshot.exists) return;
   const used = Boolean(reward.completedOrderId) || reward.status === "qualified" || reward.status === "claimed";
-  const codeRecord = removeUndefinedValues({ campaign: reward.campaign, category: reward.discountCodeCategory ?? discountCodeCategory, code: referralCode, codeType: "discount", discountPercent: reward.discountPercent, minimumSpendCents: reward.minimumSpendCents, ownerUid: reward.uid, referralCode, rewardId: `${reward.uid}_${reward.campaign}`, status: used ? "used" : "active", uid: reward.uid, usageLimit, usedByOrderId: reward.completedOrderId, usedCount: used ? 1 : 0, createdAt: reward.createdAt ?? FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+  const codeRecord = removeUndefinedValues({
+    ...buildDiscountCodeRecord({
+      campaign: reward.campaign,
+      category: reward.discountCodeCategory ?? winReferralCodeCategory,
+      code: referralCode,
+      codeType: "discount",
+      discountPercent: reward.discountPercent,
+      minimumSpendCents: reward.minimumSpendCents,
+      ownerUid: reward.uid,
+      referralCode,
+      rewardId: `${reward.uid}_${reward.campaign}`,
+      status: used ? "used" : "active",
+      uid: reward.uid,
+      usageLimit,
+      usedCount: used ? 1 : 0,
+    }),
+    createdAt: reward.createdAt ?? FieldValue.serverTimestamp(),
+    usedByOrderId: reward.completedOrderId,
+  });
   await discountCodeRef.set(codeRecord, { merge: true });
   await firestore.collection(referralCodeIndexCollection).doc(referralCode).set(codeRecord, { merge: true });
 }
 
 function serializeReward(reward: WinRewardRecord) {
-  return { campaign: reward.campaign, claimToken: reward.claimToken ?? null, claimedProductId: reward.claimedProductId ?? null, claimedVariantId: reward.claimedVariantId ?? null, completedOrderId: reward.completedOrderId ?? null, discountCodeCategory: reward.discountCodeCategory ?? discountCodeCategory, discountCodeId: reward.discountCodeId ?? reward.referralCode, discountPercent: reward.discountPercent, minimumSpendCents: reward.minimumSpendCents, nfcTagId: reward.nfcTagId ?? null, qualifiedAt: serializeTimestamp(reward.qualifiedAt), referralCode: reward.referralCode, referralUrl: reward.referralUrl, source: reward.source, status: reward.status };
+  return { campaign: reward.campaign, claimToken: reward.claimToken ?? null, claimedProductId: reward.claimedProductId ?? null, claimedVariantId: reward.claimedVariantId ?? null, completedOrderId: reward.completedOrderId ?? null, discountCodeCategory: reward.discountCodeCategory ?? winReferralCodeCategory, discountCodeId: reward.discountCodeId ?? reward.referralCode, discountPercent: reward.discountPercent, minimumSpendCents: reward.minimumSpendCents, nfcTagId: reward.nfcTagId ?? null, qualifiedAt: serializeTimestamp(reward.qualifiedAt), referralCode: reward.referralCode, referralUrl: reward.referralUrl, source: reward.source, status: reward.status };
 }
 
 async function findFreebieProduct(productId: string, variantId?: string) {
@@ -242,32 +216,9 @@ function formatPrice(cents?: number) { if (!Number.isFinite(cents ?? Number.NaN)
 function getRewardRef(uid: string, campaign: string) { return getBayblazeFirestore().collection(winRewardsCollection).doc(`${uid}_${campaign}`); }
 function normalizeWinContext(context: WinContext) { return { campaign: normalizeToken(context.campaign) || defaultCampaign, nfcTagId: normalizeToken(context.nfcTagId), source: normalizeToken(context.source) || defaultSource }; }
 function normalizeToken(value: unknown) { return readString(value).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80); }
-function normalizeReferralCode(value: unknown) { return readString(value).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80).toUpperCase(); }
+function normalizeReferralCode(value: unknown) { return normalizeDiscountCode(value); }
 function buildReferralUrl(referralCode: string) { const storefrontUrl = (env.BAYBLAZE_STOREFRONT_URL || "https://bayblaze.net").replace(/\/$/, ""); const params = new URLSearchParams({ promo: referralCode }); return `${storefrontUrl}/?${params.toString()}`; }
 function isRewardQualified(reward: WinRewardRecord) { return reward.status === "qualified" || reward.status === "claimed" || Boolean(reward.completedOrderId); }
 function serializeTimestamp(value: unknown) { if (value instanceof Timestamp) return value.toDate().toISOString(); if (typeof value === "string") return value; return null; }
 function readString(value: unknown) { return typeof value === "string" ? value.trim() : ""; }
-function readInteger(value: unknown) { const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN; return Number.isInteger(number) && number >= 0 ? number : 0; }
-function readNumber(value: unknown) { const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN; return Number.isFinite(number) && number >= 0 ? number : 0; }
-function normalizeMoneyCents(value: unknown) { const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN; return Number.isInteger(number) && number >= 0 ? number : 0; }
-function readPromoCodeType(value: unknown): PromoCodeType { return value === "bogo" ? "bogo" : "discount"; }
-function normalizePreviewDiscountItems(value: unknown): Array<{ quantity: number; unitPriceCents: number }> {
-  if (!Array.isArray(value)) return [];
-  return value.map((item) => {
-    if (!item || typeof item !== "object") return null;
-    const quantity = readInteger((item as PreviewDiscountItem).quantity);
-    const unitPriceCents = normalizeMoneyCents((item as PreviewDiscountItem).unitPriceCents);
-    if (quantity <= 0 || unitPriceCents <= 0) return null;
-    return { quantity, unitPriceCents };
-  }).filter((item): item is { quantity: number; unitPriceCents: number } => item !== null);
-}
-function calculateBogoDiscountCents(items: Array<{ quantity: number; unitPriceCents: number }>, subtotalCents: number) {
-  const unitPrices = items.flatMap((item) => Array.from({ length: item.quantity }, () => item.unitPriceCents));
-  if (!unitPrices.length) return { amountCents: Math.floor(subtotalCents / 2), discountedQuantity: subtotalCents > 0 ? 1 : 0 };
-  const discountedQuantity = Math.floor(unitPrices.length / 2);
-  if (discountedQuantity <= 0) return { amountCents: 0, discountedQuantity: 0 };
-  unitPrices.sort((left, right) => left - right);
-  return { amountCents: unitPrices.slice(0, discountedQuantity).reduce((total, price) => total + price, 0), discountedQuantity };
-}
-function formatCents(cents: number) { return new Intl.NumberFormat("en-US", { currency: "USD", style: "currency" }).format(cents / 100); }
 function removeUndefinedValues<T extends Record<string, unknown>>(value: T) { return Object.fromEntries(Object.entries(value).filter((entry) => entry[1] !== undefined)) as T; }
