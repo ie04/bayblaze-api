@@ -38,6 +38,10 @@ const completionSchema = z.object({
 
 const discountPreviewSchema = z.object({
   code: z.string().min(1),
+  items: z.array(z.object({
+    quantity: z.number().int().positive().optional(),
+    unitPriceCents: z.number().int().nonnegative().optional(),
+  })).optional(),
   subtotalCents: z.number().int().nonnegative().optional(),
 });
 

@@ -28,12 +28,14 @@ type AdminPromoCodeInput = {
   code: string;
   codeType?: AdminPromoCodeType;
   discountPercent?: number;
+  minimumSpendCents?: number;
 };
 
 type AdminPromoCodeUpdateInput = {
   code?: string;
   codeType?: AdminPromoCodeType;
   discountPercent?: number;
+  minimumSpendCents?: number;
 };
 
 export async function searchAdminAccounts(query: string, limit: number) {
@@ -78,6 +80,7 @@ export async function createAdminPromoCode(input: AdminPromoCodeInput) {
 
   const codeType = normalizePromoCodeType(input.codeType);
   const discountPercent = normalizePromoDiscountPercent(input.discountPercent, codeType);
+  const minimumSpendCents = normalizeMinimumSpendCents(input.minimumSpendCents);
   const ref = getBayblazeFirestore().collection(discountCodesCollection).doc(code);
   const existing = await ref.get();
 
@@ -90,7 +93,7 @@ export async function createAdminPromoCode(input: AdminPromoCodeInput) {
     code,
     codeType,
     discountPercent,
-    minimumSpendCents: 0,
+    minimumSpendCents,
     status: "active",
     usageLimit: 1000000,
     usedCount: 0,
@@ -157,11 +160,15 @@ export async function updateAdminPromoCode(
       input.discountPercent === undefined ? currentData.discountPercent : input.discountPercent,
       nextCodeType,
     );
+    const nextMinimumSpendCents = input.minimumSpendCents === undefined
+      ? normalizeMinimumSpendCents(currentData.minimumSpendCents)
+      : normalizeMinimumSpendCents(input.minimumSpendCents);
     const nextData = {
       ...currentData,
       code: nextCode,
       codeType: nextCodeType,
       discountPercent: nextDiscountPercent,
+      minimumSpendCents: nextMinimumSpendCents,
       ...(nextCodeType === "bogo" ? { bogoBuyQuantity: 1, bogoFreeQuantity: 1 } : {}),
       updatedAt: FieldValue.serverTimestamp(),
     };
@@ -405,6 +412,20 @@ function normalizeInteger(value: unknown) {
   const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
 
   return Number.isInteger(number) && number >= 0 ? number : 0;
+}
+
+function normalizeMinimumSpendCents(value: unknown) {
+  const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+
+  if (!Number.isFinite(number) || number <= 0) {
+    return 0;
+  }
+
+  if (!Number.isInteger(number)) {
+    throw new ApiRequestError(400, "Minimum basket size must be a whole cent amount.");
+  }
+
+  return Math.min(number, 1_000_000_00);
 }
 
 function serializeTimestamp(value: unknown) {

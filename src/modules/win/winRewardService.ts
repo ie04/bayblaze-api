@@ -110,6 +110,7 @@ export async function previewPublicDiscountCode(input: PreviewCustomerDiscountCo
 
 async function previewDiscountCode(input: PreviewCustomerDiscountCodeInput) {
   const code = normalizeReferralCode(input.code);
+  const hasSubtotal = input.subtotalCents !== undefined;
   const subtotalCents = normalizeMoneyCents(input.subtotalCents);
   if (!code) throw new ApiRequestError(400, "Promo code is required.");
   const snapshot = await getBayblazeFirestore().collection(discountCodesCollection).doc(code).get();
@@ -129,7 +130,27 @@ async function previewDiscountCode(input: PreviewCustomerDiscountCodeInput) {
   if (category !== discountCodeCategory && category !== adminPromoCodeCategory) throw new ApiRequestError(409, "That promo code is not available for checkout.");
   if (status === "used" || usedCount >= storedUsageLimit) throw new ApiRequestError(409, "That promo code has already been used.");
   if (codeType === "discount" && storedDiscountPercent <= 0) throw new ApiRequestError(409, "That promo code is not configured correctly.");
-  if (subtotalCents > 0 && storedMinimumSpendCents > subtotalCents) throw new ApiRequestError(409, `That promo code requires at least ${formatCents(storedMinimumSpendCents)} in products.`);
+  if (hasSubtotal && storedMinimumSpendCents > subtotalCents) {
+    return {
+      amountNeededCents: storedMinimumSpendCents - subtotalCents,
+      bogoBuyQuantity: codeType === "bogo" ? 1 : 0,
+      bogoDiscountedQuantity: 0,
+      bogoFreeQuantity: codeType === "bogo" ? 1 : 0,
+      category,
+      code: storedCode,
+      codeType,
+      discountAmountCents: 0,
+      discountPercent: storedDiscountPercent,
+      eligible: false,
+      ineligibilityReason: "minimum_spend",
+      message: `That promo code requires at least ${formatCents(storedMinimumSpendCents)} in products.`,
+      minimumSpendCents: storedMinimumSpendCents,
+      ownerUid,
+      subtotalCents,
+      usageLimit: storedUsageLimit,
+      usedCount,
+    };
+  }
 
   const previewItems = normalizePreviewDiscountItems(input.items);
   const bogoDiscount = codeType === "bogo" ? calculateBogoDiscountCents(previewItems, subtotalCents) : { amountCents: 0, discountedQuantity: 0 };

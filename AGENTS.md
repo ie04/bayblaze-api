@@ -276,6 +276,11 @@ Admin-created storefront promo codes are stored in
 customer discount preview endpoints accept both legacy `win_referral` discount
 records and `admin_promo` records; the admin dashboard is the only browser app
 that may create, update, or delete admin promo records.
+Admin promo records may set `minimumSpendCents`; `0` disables the minimum. The
+discount preview endpoints enforce that basket minimum against the before-tax
+product subtotal and return `eligible=false` with
+`ineligibilityReason="minimum_spend"`, `minimumSpendCents`, `subtotalCents`, and
+`amountNeededCents` when the basket is too small.
 
 Customer storefront account routes:
 
