@@ -25,6 +25,7 @@ export type DiscountCodeInput = {
   ownerUid?: string;
   referralCode?: string;
   rewardId?: string;
+  singleUsePerAccount?: boolean;
   status?: string;
   uid?: string;
   usageLimit?: number;
@@ -38,6 +39,7 @@ export type DiscountCodeUpdateInput = {
   codeType?: DiscountCodeType;
   discountPercent?: number;
   minimumSpendCents?: number;
+  singleUsePerAccount?: boolean;
 };
 
 export type DiscountCodePreviewInput = {
@@ -141,12 +143,16 @@ export async function updateDiscountCode(
     const nextMinimumSpendCents = input.minimumSpendCents === undefined
       ? normalizeInteger(currentData.minimumSpendCents)
       : normalizeMinimumSpendCents(input.minimumSpendCents);
+    const nextSingleUsePerAccount = input.singleUsePerAccount === undefined
+      ? currentData.singleUsePerAccount === true
+      : input.singleUsePerAccount === true;
     const nextData = removeUndefinedValues({
       ...currentData,
       code: nextCode,
       codeType: nextCodeType,
       discountPercent: nextDiscountPercent,
       minimumSpendCents: nextMinimumSpendCents,
+      singleUsePerAccount: nextSingleUsePerAccount,
       ...(nextCodeType === "bogo" ? { bogoBuyQuantity: 1, bogoFreeQuantity: 1 } : {}),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -240,6 +246,7 @@ export async function previewDiscountCode(
       message: `That promo code requires at least ${formatCents(discountCode.minimumSpendCents)} in products.`,
       minimumSpendCents: discountCode.minimumSpendCents,
       ownerUid: discountCode.ownerUid,
+      singleUsePerAccount: discountCode.singleUsePerAccount,
       subtotalCents,
       usageLimit: discountCode.usageLimit,
       usedCount: discountCode.usedCount,
@@ -268,6 +275,7 @@ export async function previewDiscountCode(
     eligible: true,
     minimumSpendCents: discountCode.minimumSpendCents,
     ownerUid: discountCode.ownerUid,
+    singleUsePerAccount: discountCode.singleUsePerAccount,
     subtotalCents,
     usageLimit: discountCode.usageLimit,
     usedCount: discountCode.usedCount,
@@ -292,6 +300,7 @@ export function buildDiscountCodeRecord(input: DiscountCodeInput) {
     ownerUid: readString(input.ownerUid) || undefined,
     referralCode: normalizeDiscountCode(input.referralCode) || undefined,
     rewardId: readString(input.rewardId) || undefined,
+    singleUsePerAccount: input.singleUsePerAccount === true,
     status: readString(input.status) || "active",
     uid: readString(input.uid) || undefined,
     usageLimit,
@@ -315,6 +324,7 @@ export function serializeDiscountCode(id: string, data: Record<string, unknown>)
     ownerUid: readString(data.ownerUid) || readString(data.uid),
     referralCode: normalizeDiscountCode(data.referralCode),
     rewardId: readString(data.rewardId),
+    singleUsePerAccount: data.singleUsePerAccount === true,
     status: readString(data.status) || "active",
     uid: readString(data.uid),
     usageLimit: normalizeInteger(data.usageLimit) || 1,
@@ -322,6 +332,130 @@ export function serializeDiscountCode(id: string, data: Record<string, unknown>)
     createdAt: serializeTimestamp(data.createdAt),
     updatedAt: serializeTimestamp(data.updatedAt),
   };
+}
+
+export async function hasCustomerUsedDiscountCode(uid: string, codeInput: string) {
+  const uidKey = readString(uid);
+  const code = normalizeDiscountCode(codeInput);
+
+  if (!uidKey || !code) {
+    return false;
+  }
+
+  const snapshot = await getBayblazeFirestore()
+    .collection(discountCodesCollection)
+    .doc(code)
+    .collection("account_usages")
+    .doc(uidKey)
+    .get();
+  const data = snapshot.data() ?? {};
+
+  return normalizeInteger(data.usedCount) > 0;
+}
+
+export async function recordAdminDiscountCodeUse(input: {
+  code: string;
+  customerEmail?: string;
+  customerId?: string;
+  orderId: string;
+  uid: string;
+}) {
+  const code = normalizeDiscountCode(input.code);
+  const uid = readString(input.uid);
+  const orderId = readString(input.orderId);
+
+  if (!code) {
+    throw new ApiRequestError(400, "Promo code is required.");
+  }
+
+  if (!uid) {
+    throw new ApiRequestError(401, "BayBlaze account sign-in is required.");
+  }
+
+  if (!orderId) {
+    throw new ApiRequestError(400, "Completed order ID is required.");
+  }
+
+  const firestore = getBayblazeFirestore();
+  const codeRef = firestore.collection(discountCodesCollection).doc(code);
+  const accountUsageRef = codeRef.collection("account_usages").doc(uid);
+  const orderUsageRef = codeRef.collection("order_usages").doc(orderId);
+
+  return firestore.runTransaction(async (transaction) => {
+    const [codeSnapshot, accountUsageSnapshot, orderUsageSnapshot] = await Promise.all([
+      transaction.get(codeRef),
+      transaction.get(accountUsageRef),
+      transaction.get(orderUsageRef),
+    ]);
+
+    if (!codeSnapshot.exists) {
+      throw new ApiRequestError(404, "That promo code was not found.");
+    }
+
+    if (orderUsageSnapshot.exists) {
+      return {
+        alreadyRecorded: true,
+        code,
+      };
+    }
+
+    const discountCode = serializeDiscountCode(codeSnapshot.id, codeSnapshot.data() ?? {});
+
+    if (discountCode.category !== adminPromoCodeCategory) {
+      throw new ApiRequestError(409, "That promo code is not managed by this promo tool.");
+    }
+
+    if (discountCode.status === "used" || discountCode.usedCount >= discountCode.usageLimit) {
+      throw new ApiRequestError(409, "That promo code has already been used.");
+    }
+
+    const existingAccountUseCount = normalizeInteger(accountUsageSnapshot.data()?.usedCount);
+
+    if (discountCode.singleUsePerAccount && existingAccountUseCount > 0) {
+      throw new ApiRequestError(409, "That promo code has already been used by this account.");
+    }
+
+    const now = FieldValue.serverTimestamp();
+    const nextUsedCount = discountCode.usedCount + 1;
+    const usageRecord = removeUndefinedValues({
+      code,
+      customerEmail: readString(input.customerEmail).toLowerCase() || undefined,
+      customerId: readString(input.customerId) || undefined,
+      orderId,
+      recordedAt: now,
+      uid,
+    });
+
+    transaction.create(orderUsageRef, usageRecord);
+    transaction.set(
+      accountUsageRef,
+      removeUndefinedValues({
+        code,
+        customerEmail: readString(input.customerEmail).toLowerCase() || undefined,
+        customerId: readString(input.customerId) || undefined,
+        firstOrderId: accountUsageSnapshot.exists ? undefined : orderId,
+        lastOrderId: orderId,
+        lastUsedAt: now,
+        uid,
+        usedCount: FieldValue.increment(1),
+      }),
+      { merge: true },
+    );
+    transaction.set(
+      codeRef,
+      {
+        status: nextUsedCount >= discountCode.usageLimit ? "used" : "active",
+        updatedAt: now,
+        usedCount: FieldValue.increment(1),
+      },
+      { merge: true },
+    );
+
+    return {
+      alreadyRecorded: false,
+      code,
+    };
+  });
 }
 
 export function normalizeDiscountCode(value: unknown) {

@@ -43,6 +43,7 @@ type AdminPromoCodeInput = {
   codeType?: AdminPromoCodeType;
   discountPercent?: number;
   minimumSpendCents?: number;
+  singleUsePerAccount?: boolean;
 };
 
 type AdminPromoCodeUpdateInput = {
@@ -50,6 +51,7 @@ type AdminPromoCodeUpdateInput = {
   codeType?: AdminPromoCodeType;
   discountPercent?: number;
   minimumSpendCents?: number;
+  singleUsePerAccount?: boolean;
 };
 
 export async function searchAdminAccounts(query: string, limit: number) {
@@ -92,6 +94,7 @@ export async function createAdminPromoCode(input: AdminPromoCodeInput) {
     codeType: input.codeType,
     discountPercent: input.discountPercent,
     minimumSpendCents: input.minimumSpendCents,
+    singleUsePerAccount: input.singleUsePerAccount,
     usageLimit: 1000000,
   });
 

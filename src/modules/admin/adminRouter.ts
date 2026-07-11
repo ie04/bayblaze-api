@@ -96,6 +96,7 @@ const promoCodeCreateSchema = z.object({
   codeType: promoCodeTypeSchema.optional(),
   discountPercent: z.number().positive().max(100).optional(),
   minimumSpendCents: z.number().int().nonnegative().optional(),
+  singleUsePerAccount: z.boolean().optional(),
 }).refine((value) => value.codeType === "bogo" || value.discountPercent !== undefined, {
   message: "Discount percent is required for percent-off promo codes.",
   path: ["discountPercent"],
@@ -106,7 +107,8 @@ const promoCodeUpdateSchema = z.object({
   codeType: promoCodeTypeSchema.optional(),
   discountPercent: z.number().positive().max(100).optional(),
   minimumSpendCents: z.number().int().nonnegative().optional(),
-}).refine((value) => value.code !== undefined || value.codeType !== undefined || value.discountPercent !== undefined || value.minimumSpendCents !== undefined, {
+  singleUsePerAccount: z.boolean().optional(),
+}).refine((value) => value.code !== undefined || value.codeType !== undefined || value.discountPercent !== undefined || value.minimumSpendCents !== undefined || value.singleUsePerAccount !== undefined, {
   message: "Promo code update requires at least one field.",
 });
 
@@ -272,6 +274,7 @@ export function createAdminRouter() {
         codeType: parsed.codeType,
         discountPercent: parsed.discountPercent ?? 0,
         minimumSpendCents: parsed.minimumSpendCents,
+        singleUsePerAccount: parsed.singleUsePerAccount,
       }));
     } catch (caught) {
       next(caught);

@@ -289,6 +289,11 @@ discount preview endpoints enforce that basket minimum against the before-tax
 product subtotal and return `eligible=false` with
 `ineligibilityReason="minimum_spend"`, `minimumSpendCents`, `subtotalCents`, and
 `amountNeededCents` when the basket is too small.
+Admin promo records may set `singleUsePerAccount`; when true, authenticated
+customer promo preview must reject accounts with a prior recorded use for that
+code. Successful storefront checkout with an applied promo must call
+`POST /v1/customer/discount-codes/use` with the completed order ID so the API
+records account usage under the centralized discount-code document.
 
 Automated email settings live in Firestore `email_automations/{eventType}` and
 recent outcomes are recorded in `email_event_logs`. Admins configure them
@@ -329,12 +334,15 @@ discount-code collection for collisions. Completion through
 central code used, tie it to the qualifying order, and reject any later order
 for the same code. Do not rely on a storefront-only or Medusa-only discount code
 as the source of truth for one-time win reward qualification.
-Customer checkout promo savings can be previewed without sign-in through
-`POST /v1/discount-codes/preview`, which validates code existence, status,
-one-time usage, and minimum spend without exposing owner identity. Final
-checkout lock-in goes through authenticated
-`POST /v1/customer/discount-codes/preview`; that route requires the `customer`
-badge and also validates account-bound promo ownership.
+Customer checkout promo codes can only be applied by signed-in customer
+accounts. Storefront checkout should use authenticated
+`POST /v1/customer/discount-codes/preview`, which validates code existence,
+status, one-time usage, minimum spend, account-bound promo ownership, and
+single-use-per-account history. Successful checkout with an applied promo should
+call authenticated `POST /v1/customer/discount-codes/use`. Promo codes must not
+stack in storefront UX; applying a second coupon replaces the first. The public
+`POST /v1/discount-codes/preview` route may exist for compatibility, but
+storefront checkout must not treat it as applying a promo.
 
 Google OAuth must be centralized through `bayblaze-api`: the API signs OAuth
 state, exchanges Google authorization codes, verifies the Google ID token,

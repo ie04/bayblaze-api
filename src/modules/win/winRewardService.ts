@@ -6,14 +6,19 @@ import { forwardInventoryRequest } from "../../clients/medusaInventoryClient";
 import { getBayblazeFirestore } from "../../clients/firebaseAdminClient";
 import { env } from "../../config/env";
 import {
+  adminPromoCodeCategory,
   buildDiscountCodeRecord,
   discountCodesCollection,
+  hasCustomerUsedDiscountCode,
   normalizeDiscountCode,
   previewDiscountCode as previewSharedDiscountCode,
+  recordAdminDiscountCodeUse,
+  serializeDiscountCode,
   type PreviewDiscountItem,
   winReferralCodeCategory,
 } from "../discountCodes/discountCodeService";
 import { ApiRequestError } from "../drivers/driverWorkflowService";
+import { completeWinReferral } from "./winReferralCompletionService";
 import type { FreebieProduct, WinRewardRecord, WinRewardStatus } from "./winTypes";
 
 const winRewardsCollection = "customer_win_rewards";
@@ -29,6 +34,7 @@ const maxFreebieProducts = 48;
 type WinContext = { campaign?: string; nfcTagId?: string; source?: string };
 type ClaimFreebieInput = { campaign?: string; claimToken?: string; productId: string; variantId?: string };
 type PreviewCustomerDiscountCodeInput = { code: string; items?: PreviewDiscountItem[]; subtotalCents?: number };
+type RecordCustomerDiscountCodeUseInput = { code: string; customerEmail?: string; customerId?: string; orderId: string };
 
 type InventorySnapshot = { products?: InventoryProduct[] };
 type InventoryProduct = {
@@ -112,12 +118,57 @@ export async function claimCustomerWinFreebie(uid: string, input: ClaimFreebieIn
 export async function previewCustomerDiscountCode(uid: string, input: PreviewCustomerDiscountCodeInput) {
   const preview = await previewSharedDiscountCode(input);
   if (preview.ownerUid && preview.ownerUid === uid) throw new ApiRequestError(409, "Send this friend code to someone else to unlock your freebie.");
+  if (preview.singleUsePerAccount && await hasCustomerUsedDiscountCode(uid, preview.code)) {
+    throw new ApiRequestError(409, "That promo code has already been used by this account.");
+  }
   return preview;
 }
 
 export async function previewPublicDiscountCode(input: PreviewCustomerDiscountCodeInput) {
   const { ownerUid: _ownerUid, ...preview } = await previewSharedDiscountCode(input);
   return preview;
+}
+
+export async function recordCustomerDiscountCodeUse(uid: string, input: RecordCustomerDiscountCodeUseInput) {
+  const code = normalizeDiscountCode(input.code);
+  const orderId = readString(input.orderId);
+
+  if (!code) {
+    throw new ApiRequestError(400, "Promo code is required.");
+  }
+
+  if (!orderId) {
+    throw new ApiRequestError(400, "Completed order ID is required.");
+  }
+
+  const snapshot = await getBayblazeFirestore().collection(discountCodesCollection).doc(code).get();
+
+  if (!snapshot.exists) {
+    throw new ApiRequestError(404, "That promo code was not found.");
+  }
+
+  const discountCode = serializeDiscountCode(snapshot.id, snapshot.data() ?? {});
+
+  if (discountCode.category === winReferralCodeCategory) {
+    return completeWinReferral({
+      completedOrderId: orderId,
+      customerEmail: input.customerEmail,
+      customerId: input.customerId,
+      referralCode: code,
+    });
+  }
+
+  if (discountCode.category !== adminPromoCodeCategory) {
+    throw new ApiRequestError(409, "That promo code is not available for checkout.");
+  }
+
+  return recordAdminDiscountCodeUse({
+    code,
+    customerEmail: input.customerEmail,
+    customerId: input.customerId,
+    orderId,
+    uid,
+  });
 }
 
 async function refreshRewardQualification(reward: WinRewardRecord) {

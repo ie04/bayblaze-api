@@ -11,6 +11,7 @@ import {
   getCustomerWinRewardStatus,
   previewCustomerDiscountCode,
   previewPublicDiscountCode,
+  recordCustomerDiscountCodeUse,
   startCustomerWinReward,
 } from "./winRewardService";
 
@@ -43,6 +44,13 @@ const discountPreviewSchema = z.object({
     unitPriceCents: z.number().int().nonnegative().optional(),
   })).optional(),
   subtotalCents: z.number().int().nonnegative().optional(),
+});
+
+const discountUseSchema = z.object({
+  code: z.string().min(1),
+  customerEmail: z.string().optional(),
+  customerId: z.string().optional(),
+  orderId: z.string().min(1),
 });
 
 export function createWinRewardRouter() {
@@ -128,6 +136,22 @@ export function createWinRewardRouter() {
         const parsed = discountPreviewSchema.parse(req.body ?? {});
 
         res.json(await previewCustomerDiscountCode(uid, parsed));
+      } catch (caught) {
+        next(caught);
+      }
+    },
+  );
+
+  router.post(
+    "/customer/discount-codes/use",
+    requireAccountAuth,
+    requireCustomerBadge,
+    async (req: AccountAuthedRequest, res, next) => {
+      try {
+        const uid = readRequiredUid(req);
+        const parsed = discountUseSchema.parse(req.body ?? {});
+
+        res.json(await recordCustomerDiscountCodeUse(uid, parsed));
       } catch (caught) {
         next(caught);
       }
