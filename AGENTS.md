@@ -412,7 +412,7 @@ MEDUSA_ADMIN_ORDERS_PATH=/admin/bayblaze/orders
 MEDUSA_CUSTOMER_SESSION_PATH=/admin/bayblaze/customer-sessions
 GOOGLE_OAUTH_CLIENT_ID=<google oauth client id>
 GOOGLE_OAUTH_CLIENT_SECRET=<google oauth client secret>
-GOOGLE_OAUTH_REDIRECT_URL=https://bayblaze.net/api/auth/oauth/google/callback,https://admin.bayblaze.net/auth/google/callback,https://driver.bayblaze.net/auth/google/callback,https://inventory.bayblaze.net/auth/google/callback,https://win.bayblaze.net/auth/google/callback,https://bayblaze-tap-win.lovable.app/auth/google/callback
+GOOGLE_OAUTH_REDIRECT_URL=https://bayblaze.net/api/auth/oauth/google/callback,https://admin.bayblaze.net/auth/google/callback,https://driver.bayblaze.net/auth/google/callback,https://stock.bayblaze.net/auth/google/callback,https://inventory.bayblaze.net/auth/google/callback,https://win.bayblaze.net/auth/google/callback,https://bayblaze-tap-win.lovable.app/auth/google/callback
 ```
 
 Production `/opt/bayblaze/bayblaze-api/.env.production` should keep the same
@@ -421,7 +421,9 @@ include the driver and inventory callback URLs alongside the storefront
 callback, on July 4, 2026 to include `win.bayblaze.net`, the Lovable preview
 callback, and local Vite callback URLs for `localhost`/`127.0.0.1` on ports
 `5173`, `5174`, and `5175`, and on July 5, 2026 to include the admin callback
-URL `https://admin.bayblaze.net/auth/google/callback`.
+URL `https://admin.bayblaze.net/auth/google/callback`. It was updated on
+July 11, 2026 to include the active inventory app callback URL
+`https://stock.bayblaze.net/auth/google/callback`.
 The same URLs must also be present in the Google Cloud OAuth web client's
 Authorized redirect URIs. If `GOOGLE_OAUTH_REDIRECT_URL` allows a callback but
 Google Cloud does not, the app reaches Google and fails with
@@ -1032,6 +1034,8 @@ Production CORS is normally controlled by `CORS_ORIGINS`, and the API also
 allows BayBlaze Admin Vercel preview origins matching
 `https://bayblaze-admin*.vercel.app` so preview deployments can call
 `https://api.bayblaze.net` without browser `Failed to fetch` CORS failures.
+The active inventory app origin is `https://stock.bayblaze.net`; keep it in
+production `CORS_ORIGINS` for inventory sign-in.
 After changes that affect an admin screen, wait for the relevant deploy to
 finish and smoke-test the deployed screen plus its API preflight from both
 `https://admin.bayblaze.net` and the active Vercel preview origin when one is
