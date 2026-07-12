@@ -1070,11 +1070,12 @@ BAYBLAZE_UPLOAD_DIR=...
 ```
 
 Production CORS is normally controlled by `CORS_ORIGINS`, and the API also
-allows BayBlaze Admin Vercel preview origins matching
-`https://bayblaze-admin*.vercel.app` so preview deployments can call
-`https://api.bayblaze.net` without browser `Failed to fetch` CORS failures.
-The active inventory app origin is `https://stock.bayblaze.net`; keep it in
-production `CORS_ORIGINS` for inventory sign-in.
+allows BayBlaze app custom domains (`bayblaze.net`, `www.bayblaze.net`,
+`admin.bayblaze.net`, `driver.bayblaze.net`, `stock.bayblaze.net`,
+`inventory.bayblaze.net`, and `win.bayblaze.net`) plus BayBlaze Vercel preview
+origins matching `https://bayblaze-{admin,storefront,driver,inventory,win}*.vercel.app`
+so browser apps can call `https://api.bayblaze.net` without `Failed to fetch`
+CORS failures.
 After changes that affect an admin screen, wait for the relevant deploy to
 finish and smoke-test the deployed screen plus its API preflight from both
 `https://admin.bayblaze.net` and the active Vercel preview origin when one is

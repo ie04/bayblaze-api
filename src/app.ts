@@ -18,7 +18,15 @@ import { createStorefrontActivityRouter } from "./modules/storefront/storefrontA
 import { createStorefrontSettingsRouter } from "./modules/storefront/storefrontSettingsRouter";
 import { createWinRewardRouter } from "./modules/win/winRewardRouter";
 
-const vercelPreviewOriginPattern = /^https:\/\/bayblaze-admin(?:-[a-z0-9-]+)?\.vercel\.app$/i;
+const bayblazeAppOriginPatterns = [
+  /^https:\/\/(?:www\.)?bayblaze\.net$/i,
+  /^https:\/\/admin\.bayblaze\.net$/i,
+  /^https:\/\/driver\.bayblaze\.net$/i,
+  /^https:\/\/stock\.bayblaze\.net$/i,
+  /^https:\/\/inventory\.bayblaze\.net$/i,
+  /^https:\/\/win\.bayblaze\.net$/i,
+  /^https:\/\/bayblaze-(?:admin|storefront|driver|inventory|win)(?:-[a-z0-9-]+)?\.vercel\.app$/i,
+];
 
 export function createApp() {
   const app = express();
@@ -102,7 +110,10 @@ function isAllowedCorsOrigin(origin: string | undefined, callback: (err: Error |
     return callback(null, true);
   }
 
-  if (env.CORS_ORIGINS_LIST.includes(origin) || vercelPreviewOriginPattern.test(origin)) {
+  if (
+    env.CORS_ORIGINS_LIST.includes(origin) ||
+    bayblazeAppOriginPatterns.some((pattern) => pattern.test(origin))
+  ) {
     return callback(null, true);
   }
 
