@@ -19,6 +19,7 @@ type CompleteWinReferralInput = {
   completedOrderId?: string;
   customerEmail?: string;
   customerId?: string;
+  isCustomerFirstOrder?: boolean;
   orderId?: string;
   referralCode: string;
 };
@@ -28,6 +29,7 @@ export async function completeWinReferral(input: CompleteWinReferralInput) {
   const completedOrderId = readString(input.completedOrderId) || readString(input.orderId);
   const completedCustomerId = readString(input.customerId);
   const completedCustomerEmail = readString(input.customerEmail).toLowerCase();
+  const isCustomerFirstOrder = input.isCustomerFirstOrder === true;
 
   if (!referralCode) {
     throw new ApiRequestError(400, "Referral code is required.");
@@ -41,12 +43,18 @@ export async function completeWinReferral(input: CompleteWinReferralInput) {
   const indexRef = firestore.collection(referralCodeIndexCollection).doc(referralCode);
   const discountCodeRef = firestore.collection(discountCodesCollection).doc(referralCode);
   const completionRef = firestore.collection(orderCompletionsCollection).doc(referralCode);
+  const ignoredCompletionRef = firestore
+    .collection(orderCompletionsCollection)
+    .doc(referralCode)
+    .collection("ignored_orders")
+    .doc(completedOrderId);
   const claimToken = randomBytes(24).toString("base64url");
   const result = await firestore.runTransaction(async (transaction) => {
-    const [indexSnapshot, discountCodeSnapshot, completionSnapshot] = await Promise.all([
+    const [indexSnapshot, discountCodeSnapshot, completionSnapshot, ignoredCompletionSnapshot] = await Promise.all([
       transaction.get(indexRef),
       transaction.get(discountCodeRef),
       transaction.get(completionRef),
+      transaction.get(ignoredCompletionRef),
     ]);
 
     if (!indexSnapshot.exists) {
@@ -61,6 +69,46 @@ export async function completeWinReferral(input: CompleteWinReferralInput) {
 
     if (!rewardId || !uid) {
       throw new ApiRequestError(409, "BayBlaze win referral record is incomplete.");
+    }
+
+    if (!isCustomerFirstOrder) {
+      const now = FieldValue.serverTimestamp();
+      const ignoredRecord = removeUndefinedValues({
+        category: winReferralCodeCategory,
+        completedAt: now,
+        completedCustomerEmail: completedCustomerEmail || undefined,
+        completedCustomerId: completedCustomerId || undefined,
+        completedOrderId,
+        firstOrderRequired: true,
+        ignoredReason: "customer_not_first_order",
+        isCustomerFirstOrder: false,
+        orderId: completedOrderId,
+        ownerUid: uid,
+        referralCode,
+        rewardId,
+        uid,
+        updatedAt: now,
+      });
+
+      if (!ignoredCompletionSnapshot.exists) {
+        transaction.create(ignoredCompletionRef, ignoredRecord);
+      }
+
+      transaction.set(
+        discountCodeRef.collection("order_usages").doc(completedOrderId),
+        ignoredRecord,
+        { merge: true },
+      );
+
+      return {
+        claimToken: "",
+        completedOrderId,
+        rewardId,
+        uid,
+        alreadyCompleted: ignoredCompletionSnapshot.exists,
+        ignored: true,
+        ignoredReason: "customer_not_first_order",
+      };
     }
 
     if (existingCompletion) {
@@ -101,6 +149,8 @@ export async function completeWinReferral(input: CompleteWinReferralInput) {
       completedCustomerEmail: completedCustomerEmail || undefined,
       completedCustomerId: completedCustomerId || undefined,
       completedOrderId,
+      firstOrderRequired: true,
+      isCustomerFirstOrder: true,
       orderId: completedOrderId,
       ownerUid: uid,
       referralCode,
@@ -114,6 +164,8 @@ export async function completeWinReferral(input: CompleteWinReferralInput) {
       codeType: "discount",
       completedCustomerEmail: completedCustomerEmail || undefined,
       completedCustomerId: completedCustomerId || undefined,
+      firstOrderRequired: true,
+      isCustomerFirstOrder: true,
       ownerUid: uid,
       rewardId,
       status: "used",
@@ -147,6 +199,17 @@ export async function completeWinReferral(input: CompleteWinReferralInput) {
       alreadyCompleted: false,
     };
   });
+
+  if (result.ignored) {
+    return {
+      completedOrderId: result.completedOrderId,
+      ignored: true,
+      ignoredReason: result.ignoredReason,
+      referralCode,
+      rewardId: result.rewardId,
+      status: "waiting_for_friend_order",
+    };
+  }
 
   return {
     claimToken: result.claimToken,

@@ -33,6 +33,7 @@ const completionSchema = z.object({
   completedOrderId: z.string().optional(),
   customerEmail: z.string().optional(),
   customerId: z.string().optional(),
+  isCustomerFirstOrder: z.boolean().optional(),
   orderId: z.string().optional(),
   referralCode: z.string().min(1),
 });
@@ -50,6 +51,7 @@ const discountUseSchema = z.object({
   code: z.string().min(1),
   customerEmail: z.string().optional(),
   customerId: z.string().optional(),
+  isCustomerFirstOrder: z.boolean().optional(),
   orderId: z.string().min(1),
 });
 

@@ -34,7 +34,13 @@ const maxFreebieProducts = 48;
 type WinContext = { campaign?: string; nfcTagId?: string; source?: string };
 type ClaimFreebieInput = { campaign?: string; claimToken?: string; productId: string; variantId?: string };
 type PreviewCustomerDiscountCodeInput = { code: string; items?: PreviewDiscountItem[]; subtotalCents?: number };
-type RecordCustomerDiscountCodeUseInput = { code: string; customerEmail?: string; customerId?: string; orderId: string };
+type RecordCustomerDiscountCodeUseInput = {
+  code: string;
+  customerEmail?: string;
+  customerId?: string;
+  isCustomerFirstOrder?: boolean;
+  orderId: string;
+};
 
 type InventorySnapshot = { products?: InventoryProduct[] };
 type InventoryProduct = {
@@ -154,6 +160,7 @@ export async function recordCustomerDiscountCodeUse(uid: string, input: RecordCu
       completedOrderId: orderId,
       customerEmail: input.customerEmail,
       customerId: input.customerId,
+      isCustomerFirstOrder: input.isCustomerFirstOrder,
       referralCode: code,
     });
   }

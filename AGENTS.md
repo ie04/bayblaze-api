@@ -334,6 +334,11 @@ discount-code collection for collisions. Completion through
 central code used, tie it to the qualifying order, and reject any later order
 for the same code. Do not rely on a storefront-only or Medusa-only discount code
 as the source of truth for one-time win reward qualification.
+BayBlaze Win freebies only unlock when the friend code is used by a customer on
+that customer's first order. Storefront checkout must send
+`isCustomerFirstOrder` to `POST /v1/customer/discount-codes/use`; if the friend
+has prior orders, the API should audit the ignored code use without marking the
+win reward qualified or issuing a freebie claim token.
 Customer checkout promo codes can only be applied by signed-in customer
 accounts. Storefront checkout should use authenticated
 `POST /v1/customer/discount-codes/preview`, which validates code existence,
