@@ -14,6 +14,7 @@ import { createEmailAutomationRouter } from "./modules/email/emailAutomationRout
 import { createInventoryBridgeRouter } from "./modules/inventory/inventoryBridgeRouter";
 import { IsochronosRequestError } from "./modules/isochronos/googleMapsService";
 import { createOrderBridgeRouter } from "./modules/orders/orderBridgeRouter";
+import { createStorefrontSettingsRouter } from "./modules/storefront/storefrontSettingsRouter";
 import { createWinRewardRouter } from "./modules/win/winRewardRouter";
 
 const vercelPreviewOriginPattern = /^https:\/\/bayblaze-admin(?:-[a-z0-9-]+)?\.vercel\.app$/i;
@@ -64,6 +65,7 @@ export function createApp() {
   app.use("/v1", createDriverBridgeRouter());
   app.use("/v1", createDriverWorkflowRouter());
   app.use("/v1", createEmailAutomationRouter());
+  app.use("/v1", createStorefrontSettingsRouter());
   app.use("/v1", createWinRewardRouter());
 
   app.use((_req, res) => {

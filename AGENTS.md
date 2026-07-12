@@ -360,6 +360,13 @@ stack in storefront UX; applying a second coupon replaces the first. The public
 `POST /v1/discount-codes/preview` route may exist for compatibility, but
 storefront checkout must not treat it as applying a promo.
 
+Storefront-wide customer-facing settings live in Firestore
+`storefront_settings/global`. `GET /v1/storefront/settings` exposes safe public
+settings such as `priceAdjustmentCents`; admin operators manage the same values
+through `GET/PATCH /v1/admin/storefront-settings`. The storefront applies
+`priceAdjustmentCents` before product prices reach shop/product/cart/checkout
+flows, so changing it adjusts item prices sitewide without a storefront redeploy.
+
 Google OAuth must be centralized through `bayblaze-api`: the API signs OAuth
 state, exchanges Google authorization codes, verifies the Google ID token,
 creates or finds the Firebase Auth user, ensures an account record, and returns
