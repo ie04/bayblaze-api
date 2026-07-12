@@ -54,6 +54,15 @@ type RenderedEmail = {
 const emailAutomationsCollection = "email_automations";
 const emailEventLogsCollection = "email_event_logs";
 const maxLogCount = 50;
+const legacyOrderPlacedHtmlTemplate = [
+  "<div style=\"font-family:Arial,sans-serif;color:#11130f;line-height:1.5\">",
+  "<h1 style=\"font-size:24px;margin:0 0 12px\">Order received</h1>",
+  "<p>Thanks {{customerName}}. We received your BayBlaze order {{orderNumber}}.</p>",
+  "<p><strong>Total due:</strong> {{orderTotal}}</p>",
+  "<p>Payment is due on delivery. Please have your ID ready.</p>",
+  "<p><a href=\"{{orderUrl}}\">Track your order</a></p>",
+  "</div>",
+].join("");
 
 const defaultAutomations: Record<EmailAutomationEventType, EmailAutomationRecord> = {
   order_placed: {
@@ -62,12 +71,22 @@ const defaultAutomations: Record<EmailAutomationEventType, EmailAutomationRecord
     eventType: "order_placed",
     fromEmail: "",
     htmlTemplate: [
-      "<div style=\"font-family:Arial,sans-serif;color:#11130f;line-height:1.5\">",
-      "<h1 style=\"font-size:24px;margin:0 0 12px\">Order received</h1>",
-      "<p>Thanks {{customerName}}. We received your BayBlaze order {{orderNumber}}.</p>",
-      "<p><strong>Total due:</strong> {{orderTotal}}</p>",
-      "<p>Payment is due on delivery. Please have your ID ready.</p>",
-      "<p><a href=\"{{orderUrl}}\">Track your order</a></p>",
+      "<div style=\"margin:0;padding:28px 18px;background:#f6f8f5;color:#000000;font-family:Jost,Avenir,Montserrat,Arial,sans-serif;line-height:1.6\">",
+      "<div style=\"max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #d8ded2;border-radius:18px;overflow:hidden;box-shadow:0 18px 44px rgba(17,19,15,0.12)\">",
+      "<div style=\"padding:26px 26px 18px;border-bottom:1px solid #e3e7df\">",
+      "<p style=\"margin:0 0 10px;color:#2c541d;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase\">BayBlaze</p>",
+      "<h1 style=\"margin:0;color:#000000;font-size:30px;line-height:1.08;font-weight:800\">Order received</h1>",
+      "</div>",
+      "<div style=\"padding:24px 26px 28px\">",
+      "<p style=\"margin:0 0 16px;font-size:17px;color:#11130f\">Thanks {{customerName}}. We received your BayBlaze order <strong style=\"font-weight:700\">{{orderNumber}}</strong>.</p>",
+      "<div style=\"margin:0 0 18px;padding:16px 18px;background:#f6f8f5;border:1px solid #d8ded2;border-radius:14px\">",
+      "<p style=\"margin:0;color:#585858;font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase\">Total due on delivery</p>",
+      "<p style=\"margin:4px 0 0;color:#000000;font-size:24px;font-weight:800\">{{orderTotal}}</p>",
+      "</div>",
+      "<p style=\"margin:0 0 22px;color:#585858;font-size:15px\">Payment is due on delivery. Please have your ID ready.</p>",
+      "<a href=\"{{orderUrl}}\" style=\"display:inline-block;background:#74a84a;color:#000000;text-decoration:none;font-size:15px;font-weight:800;padding:13px 18px;border-radius:999px\">Track your order</a>",
+      "</div>",
+      "</div>",
       "</div>",
     ].join(""),
     internalRecipientEmails: [],
@@ -284,6 +303,7 @@ async function getAutomation(eventType: EmailAutomationEventType): Promise<Email
   return {
     ...fallback,
     ...data,
+    htmlTemplate: normalizeStoredHtmlTemplate(eventType, data.htmlTemplate ?? fallback.htmlTemplate),
     internalRecipientEmails: normalizeEmailList(data.internalRecipientEmails ?? fallback.internalRecipientEmails),
     recipientMode: normalizeRecipientMode(data.recipientMode ?? fallback.recipientMode),
   };
@@ -349,13 +369,21 @@ function renderTemplate(template: string, variables: Record<string, string>) {
   return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key: string) => variables[key] ?? "");
 }
 
+function normalizeStoredHtmlTemplate(eventType: EmailAutomationEventType, template: string) {
+  if (eventType === "order_placed" && template === legacyOrderPlacedHtmlTemplate) {
+    return defaultAutomations[eventType].htmlTemplate;
+  }
+
+  return template;
+}
+
 function serializeAutomation(eventType: EmailAutomationEventType, data: Partial<EmailAutomationRecord>) {
   return {
     description: data.description ?? defaultAutomations[eventType].description,
     enabled: data.enabled !== false,
     eventType,
     fromEmail: normalizeOptionalString(data.fromEmail),
-    htmlTemplate: data.htmlTemplate ?? defaultAutomations[eventType].htmlTemplate,
+    htmlTemplate: normalizeStoredHtmlTemplate(eventType, data.htmlTemplate ?? defaultAutomations[eventType].htmlTemplate),
     internalRecipientEmails: normalizeEmailList(data.internalRecipientEmails ?? []),
     label: data.label ?? defaultAutomations[eventType].label,
     recipientMode: normalizeRecipientMode(data.recipientMode),

@@ -309,6 +309,11 @@ through `/v1/admin/email-automations`. Service-to-service triggers call
 posts an `order_placed` event to `bayblaze-api`; the API renders the configured
 template and sends through Resend using `AUTOMATED_EMAIL_FROM`, falling back to
 `DRIVER_EMAIL_FROM` when no automation-level from-address is set.
+Built-in BayBlaze email HTML should follow the storefront Jost theme: Jost-first
+font stack, off-white background, white rounded card, black text, green accents,
+and email-safe inline styles. The API upgrades the legacy built-in
+`order_placed` Arial template to the Jost default while preserving custom admin
+templates.
 
 Customer storefront account routes:
 

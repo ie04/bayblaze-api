@@ -152,13 +152,23 @@ function configureWebPush() {
 
 function renderAssignmentEmailHtml(stop: DriverDeliveryStop) {
   return [
-    "<div style=\"font-family:Arial,sans-serif;color:#111;line-height:1.5\">",
-    "<h1 style=\"font-size:22px;margin:0 0 12px\">New BayBlaze delivery</h1>",
-    `<p style="font-size:17px;font-weight:700;margin:0 0 8px">${escapeHtml(stop.customerName)}</p>`,
-    `<p style="margin:0 0 12px">${escapeHtml(stop.customerAddress)}</p>`,
-    `<p style="margin:0 0 12px">Order: ${escapeHtml(formatOrderLabel(stop))}</p>`,
-    stop.eta ? `<p style="margin:0 0 12px">ETA: ${escapeHtml(stop.eta)}</p>` : "",
-    "<p>Open the BayBlaze Driver app to start the delivery workflow.</p>",
+    "<div style=\"margin:0;padding:28px 18px;background:#f6f8f5;color:#000000;font-family:Jost,Avenir,Montserrat,Arial,sans-serif;line-height:1.55\">",
+    "<div style=\"max-width:540px;margin:0 auto;background:#ffffff;border:1px solid #d8ded2;border-radius:18px;overflow:hidden;box-shadow:0 18px 44px rgba(17,19,15,0.12)\">",
+    "<div style=\"padding:24px 24px 16px;border-bottom:1px solid #e3e7df\">",
+    "<p style=\"margin:0 0 10px;color:#2c541d;font-size:12px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase\">BayBlaze Driver</p>",
+    "<h1 style=\"margin:0;color:#000000;font-size:28px;line-height:1.1;font-weight:800\">New delivery</h1>",
+    "</div>",
+    "<div style=\"padding:22px 24px 26px\">",
+    `<p style="font-size:18px;font-weight:800;margin:0 0 8px;color:#11130f">${escapeHtml(stop.customerName)}</p>`,
+    `<p style="margin:0 0 16px;color:#585858;font-size:15px">${escapeHtml(stop.customerAddress)}</p>`,
+    "<div style=\"margin:0 0 18px;padding:15px 16px;background:#f6f8f5;border:1px solid #d8ded2;border-radius:14px\">",
+    `<p style="margin:0 0 6px;color:#585858;font-size:13px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase">Order</p>`,
+    `<p style="margin:0;color:#000000;font-size:18px;font-weight:800">${escapeHtml(formatOrderLabel(stop))}</p>`,
+    stop.eta ? `<p style="margin:8px 0 0;color:#2c541d;font-size:15px;font-weight:700">ETA: ${escapeHtml(stop.eta)}</p>` : "",
+    "</div>",
+    "<p style=\"margin:0;color:#11130f;font-size:15px\">Open the BayBlaze Driver app to start the delivery workflow.</p>",
+    "</div>",
+    "</div>",
     "</div>",
   ].join("");
 }
