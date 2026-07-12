@@ -14,6 +14,7 @@ import { createEmailAutomationRouter } from "./modules/email/emailAutomationRout
 import { createInventoryBridgeRouter } from "./modules/inventory/inventoryBridgeRouter";
 import { IsochronosRequestError } from "./modules/isochronos/googleMapsService";
 import { createOrderBridgeRouter } from "./modules/orders/orderBridgeRouter";
+import { createStorefrontActivityRouter } from "./modules/storefront/storefrontActivityRouter";
 import { createStorefrontSettingsRouter } from "./modules/storefront/storefrontSettingsRouter";
 import { createWinRewardRouter } from "./modules/win/winRewardRouter";
 
@@ -65,6 +66,7 @@ export function createApp() {
   app.use("/v1", createDriverBridgeRouter());
   app.use("/v1", createDriverWorkflowRouter());
   app.use("/v1", createEmailAutomationRouter());
+  app.use("/v1", createStorefrontActivityRouter());
   app.use("/v1", createStorefrontSettingsRouter());
   app.use("/v1", createWinRewardRouter());
 

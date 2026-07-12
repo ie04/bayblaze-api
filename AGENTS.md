@@ -367,6 +367,14 @@ through `GET/PATCH /v1/admin/storefront-settings`. The storefront applies
 `priceAdjustmentCents` before product prices reach shop/product/cart/checkout
 flows, so changing it adjusts item prices sitewide without a storefront redeploy.
 
+Storefront abandonment/activity tracking is API-owned. The storefront browser
+posts safe lifecycle events to public
+`POST /v1/storefront/activity/events`; the API stores rolling session summaries
+in Firestore `storefront_sessions/{sessionId}` with recent event breadcrumbs.
+Admin operators read those summaries through authenticated
+`GET /v1/admin/storefront-activity/sessions`. Do not put Firebase writes or
+service tokens in the storefront/admin browser bundles for this workflow.
+
 Google OAuth must be centralized through `bayblaze-api`: the API signs OAuth
 state, exchanges Google authorization codes, verifies the Google ID token,
 creates or finds the Firebase Auth user, ensures an account record, and returns
