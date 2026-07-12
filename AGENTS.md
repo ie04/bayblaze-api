@@ -274,6 +274,12 @@ GET    /v1/admin/orders/:orderId
 DELETE /v1/admin/orders/:orderId
 ```
 
+`GET /v1/admin/accounts` and `PATCH /v1/admin/accounts/:uid` include
+`winReferrals` summaries on returned account objects for BayBlaze Win reward
+records owned by that UID. Each summary should expose referral generation,
+qualifying friend-code consumption, and referrer freebie claim consumption
+state without requiring the admin browser to read Firestore directly.
+
 Storefront promo codes share the API-owned discount code module in
 `src/modules/discountCodes/discountCodeService.ts` and Firestore collection
 `customer_discount_codes/{CODE}`. Admin-created promo records use

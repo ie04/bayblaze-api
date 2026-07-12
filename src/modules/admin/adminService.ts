@@ -55,8 +55,10 @@ type AdminPromoCodeUpdateInput = {
 };
 
 export async function searchAdminAccounts(query: string, limit: number) {
+  const accounts = await searchAccounts(query, limit);
+
   return {
-    accounts: await searchAccounts(query, limit),
+    accounts: await attachWinReferralSummaries(accounts),
   };
 }
 
@@ -70,9 +72,89 @@ export async function updateAdminAccount(
     settings?: { ageVerificationDisabled?: boolean };
   },
 ) {
+  const account = await updateAccountAccess(uid, input);
+
   return {
-    account: await updateAccountAccess(uid, input),
+    account: (await attachWinReferralSummaries([account]))[0],
   };
+}
+
+async function attachWinReferralSummaries<T extends { uid: string }>(accounts: T[]) {
+  const summaries = await Promise.all(
+    accounts.map(async (account) => ({
+      uid: account.uid,
+      winReferrals: await listWinReferralSummaries(account.uid),
+    })),
+  );
+  const summariesByUid = new Map(summaries.map((summary) => [summary.uid, summary.winReferrals]));
+
+  return accounts.map((account) => ({
+    ...account,
+    winReferrals: summariesByUid.get(account.uid) ?? [],
+  }));
+}
+
+async function listWinReferralSummaries(uid: string) {
+  const snapshot = await getBayblazeFirestore()
+    .collection("customer_win_rewards")
+    .where("uid", "==", uid)
+    .get();
+
+  return snapshot.docs
+    .map((doc) => {
+      const reward = doc.data() ?? {};
+      const referralCode = readString(reward.referralCode);
+      const completedOrderId = readString(reward.completedOrderId);
+      const claimedProductId = readString(reward.claimedProductId);
+      const claimedVariantId = readString(reward.claimedVariantId);
+      const status = readString(reward.status) || "waiting_for_friend_order";
+      const qualifiedAt = serializeAdminTimestamp(reward.qualifiedAt);
+      const claimedAt = serializeAdminTimestamp(reward.claimedAt);
+
+      return {
+        campaign: readString(reward.campaign),
+        claimTokenIssued: Boolean(readString(reward.claimToken)),
+        claimedAt,
+        claimedProductId,
+        claimedVariantId,
+        completedOrderId,
+        createdAt: serializeAdminTimestamp(reward.createdAt),
+        freebieConsumed: status === "claimed" || Boolean(claimedAt || claimedProductId || claimedVariantId),
+        id: doc.id,
+        qualifiedAt,
+        referralCode,
+        referralConsumed: status === "qualified" || status === "claimed" || Boolean(completedOrderId || qualifiedAt),
+        referralUrl: readString(reward.referralUrl),
+        status,
+        updatedAt: serializeAdminTimestamp(reward.updatedAt),
+      };
+    })
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+}
+
+function serializeAdminTimestamp(value: unknown) {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (
+    value &&
+    typeof value === "object" &&
+    "toDate" in value &&
+    typeof value.toDate === "function"
+  ) {
+    return value.toDate().toISOString();
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return "";
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 export async function listAdminPromoCodes() {
