@@ -920,7 +920,7 @@ BayBlaze is a Tampa-based mobile smoke shop/delivery business.
 
 Public-facing copy must not claim CBD, kratom, THC, or other not-yet-sellable product categories are available unless explicitly confirmed.
 
-Orders placed after 11 PM should not be promised for immediate delivery. They should dispatch at 10 AM the next day or later depending on selected scheduled delivery time.
+BayBlaze Express/on-demand delivery is available 24/7. Do not reintroduce the old 10 AM to 11 PM delivery-hours restriction in customer-facing checkout, routing, or delivery copy unless the business explicitly changes the availability model again.
 
 Age-gated fulfillment assumes the customer must be 21+ and have physical ID available at delivery.
 
