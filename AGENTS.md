@@ -362,10 +362,14 @@ storefront checkout must not treat it as applying a promo.
 
 Storefront-wide customer-facing settings live in Firestore
 `storefront_settings/global`. `GET /v1/storefront/settings` exposes safe public
-settings such as `priceAdjustmentCents`; admin operators manage the same values
-through `GET/PATCH /v1/admin/storefront-settings`. The storefront applies
+settings such as `priceAdjustmentCents` and `ageVerificationDisabled`; admin
+operators manage the same values through
+`GET/PATCH /v1/admin/storefront-settings`. The storefront applies
 `priceAdjustmentCents` before product prices reach shop/product/cart/checkout
 flows, so changing it adjusts item prices sitewide without a storefront redeploy.
+When `ageVerificationDisabled` is true, storefront checkout bypasses AgeChecker
+globally for testing and records `age_verification_source:
+"storefront_testing"` in order metadata.
 
 Storefront abandonment/activity tracking is API-owned. The storefront browser
 posts safe lifecycle events to public

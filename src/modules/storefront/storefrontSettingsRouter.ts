@@ -8,7 +8,8 @@ import {
 } from "./storefrontSettingsService";
 
 const storefrontSettingsUpdateSchema = z.object({
-  priceAdjustmentCents: z.number().int().nonnegative().max(1_000_000_00),
+  ageVerificationDisabled: z.boolean().optional(),
+  priceAdjustmentCents: z.number().int().nonnegative().max(1_000_000_00).optional(),
 });
 
 export function createStorefrontSettingsRouter() {

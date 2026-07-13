@@ -7,6 +7,7 @@ const storefrontSettingsCollection = "storefront_settings";
 const storefrontSettingsDoc = "global";
 
 export type StorefrontSettingsUpdateInput = {
+  ageVerificationDisabled?: boolean;
   priceAdjustmentCents?: number;
 };
 
@@ -20,27 +21,29 @@ export async function getStorefrontSettings() {
 }
 
 export async function updateStorefrontSettings(input: StorefrontSettingsUpdateInput) {
-  const priceAdjustmentCents = normalizePriceAdjustmentCents(input.priceAdjustmentCents);
+  const updates: Record<string, unknown> = {
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  if (input.priceAdjustmentCents !== undefined) {
+    updates.priceAdjustmentCents = normalizePriceAdjustmentCents(input.priceAdjustmentCents);
+  }
+
+  if (input.ageVerificationDisabled !== undefined) {
+    updates.ageVerificationDisabled = input.ageVerificationDisabled === true;
+  }
 
   await getBayblazeFirestore()
     .collection(storefrontSettingsCollection)
     .doc(storefrontSettingsDoc)
-    .set(
-      {
-        priceAdjustmentCents,
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
+    .set(updates, { merge: true });
 
-  return serializeStorefrontSettings({
-    priceAdjustmentCents,
-    updatedAt: new Date().toISOString(),
-  });
+  return getStorefrontSettings();
 }
 
 function serializeStorefrontSettings(data: Record<string, unknown>) {
   return {
+    ageVerificationDisabled: data.ageVerificationDisabled === true,
     priceAdjustmentCents: readNonnegativeInteger(data.priceAdjustmentCents),
     updatedAt: serializeTimestamp(data.updatedAt),
   };
