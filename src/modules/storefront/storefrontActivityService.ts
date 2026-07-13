@@ -60,6 +60,7 @@ export async function recordStorefrontActivity(input: StorefrontActivityInput) {
     occurredAt,
     page: normalizePage(input.page),
     receivedAt: FieldValue.serverTimestamp(),
+    sessionId,
     userAgent: normalizeText(input.userAgent).slice(0, 500),
     visitorId,
   };
@@ -101,6 +102,72 @@ export async function listStorefrontAbandonmentSessions(limit = 100) {
 
   return {
     sessions: snapshot.docs.map((doc) => serializeSession(doc.id, doc.data())),
+  };
+}
+
+export async function getStorefrontVisitorAnalytics(days = 30) {
+  const bucketCount = Math.min(Math.max(Math.round(days), 1), 90);
+  const dates = getRecentDateKeys(bucketCount);
+  const buckets = new Map(dates.map((date) => [
+    date,
+    {
+      date,
+      pageViews: 0,
+      sessions: new Set<string>(),
+      uniqueVisitors: new Set<string>(),
+    },
+  ]));
+  const sinceDate = new Date(`${dates[0]}T00:00:00.000Z`);
+  const snapshot = await getBayblazeFirestore()
+    .collectionGroup("events")
+    .where("occurredAt", ">=", sinceDate.toISOString())
+    .orderBy("occurredAt", "desc")
+    .limit(50_000)
+    .get();
+  const visitors = new Set<string>();
+  const sessions = new Set<string>();
+  let pageViews = 0;
+
+  snapshot.docs.forEach((doc) => {
+    const data = doc.data();
+    const date = getDateKey(data.occurredAt);
+    const bucket = buckets.get(date);
+
+    if (!bucket) {
+      return;
+    }
+
+    const visitorId = normalizeText(data.visitorId) || doc.id;
+    const sessionId = normalizeText(data.sessionId) || doc.ref.parent.parent?.id || doc.id;
+    const isPageView = normalizeText(data.eventType) === "page_view";
+
+    bucket.sessions.add(sessionId);
+    bucket.uniqueVisitors.add(visitorId);
+    bucket.pageViews += isPageView ? 1 : 0;
+    sessions.add(sessionId);
+    visitors.add(visitorId);
+    pageViews += isPageView ? 1 : 0;
+  });
+
+  const serializedBuckets = Array.from(buckets.values()).map((bucket) => ({
+    date: bucket.date,
+    pageViews: bucket.pageViews,
+    sessions: bucket.sessions.size,
+    uniqueVisitors: bucket.uniqueVisitors.size,
+  }));
+
+  return {
+    buckets: serializedBuckets,
+    range: {
+      days: bucketCount,
+      from: `${dates[0]}T00:00:00.000Z`,
+      to: new Date().toISOString(),
+    },
+    totals: {
+      pageViews,
+      sessions: sessions.size,
+      uniqueVisitors: visitors.size,
+    },
   };
 }
 
@@ -230,4 +297,26 @@ function serializeTimestamp(value: unknown) {
   }
 
   return "";
+}
+
+function getRecentDateKeys(days: number) {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+
+  return Array.from({ length: days }, (_, index) => {
+    const date = new Date(today);
+    date.setUTCDate(today.getUTCDate() - (days - index - 1));
+    return date.toISOString().slice(0, 10);
+  });
+}
+
+function getDateKey(value: unknown) {
+  const iso = serializeTimestamp(value);
+  const parsed = iso ? new Date(iso) : null;
+
+  if (!parsed || Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  return parsed.toISOString().slice(0, 10);
 }

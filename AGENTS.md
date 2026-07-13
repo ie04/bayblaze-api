@@ -376,8 +376,11 @@ posts safe lifecycle events to public
 `POST /v1/storefront/activity/events`; the API stores rolling session summaries
 in Firestore `storefront_sessions/{sessionId}` with recent event breadcrumbs.
 Admin operators read those summaries through authenticated
-`GET /v1/admin/storefront-activity/sessions`. Do not put Firebase writes or
-service tokens in the storefront/admin browser bundles for this workflow.
+`GET /v1/admin/storefront-activity/sessions`. Admin storefront visitor trends
+come from authenticated `GET /v1/admin/storefront-activity/analytics`, which
+returns daily buckets for unique visitors, sessions, and page views from the
+stored activity events. Do not put Firebase writes or service tokens in the
+storefront/admin browser bundles for this workflow.
 
 Google OAuth must be centralized through `bayblaze-api`: the API signs OAuth
 state, exchanges Google authorization codes, verifies the Google ID token,

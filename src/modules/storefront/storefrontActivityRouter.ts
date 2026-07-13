@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { requireAccountAuth, requireAccountRole, type AccountAuthedRequest } from "../../http/middleware/accountAuth";
 import {
+  getStorefrontVisitorAnalytics,
   listStorefrontAbandonmentSessions,
   recordStorefrontActivity,
 } from "./storefrontActivityService";
@@ -54,6 +55,15 @@ export function createStorefrontActivityRouter() {
     try {
       const limit = Number(req.query.limit) || 100;
       res.json(await listStorefrontAbandonmentSessions(limit));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.get("/admin/storefront-activity/analytics", async (req, res, next) => {
+    try {
+      const days = Number(req.query.days) || 30;
+      res.json(await getStorefrontVisitorAnalytics(days));
     } catch (caught) {
       next(caught);
     }
