@@ -737,6 +737,7 @@ Every BayBlaze-routable Medusa variant must have metadata:
 ```env
 inventoryState=ON_VEHICLE or IN_WAREHOUSE
 availableQuantity=integer >= 0
+unitPriceCents=integer >= 0, optional internal unit cost for profit reporting
 ```
 
 Storefront cart/order items passed into routing eligibility must normalize to variant-level items:

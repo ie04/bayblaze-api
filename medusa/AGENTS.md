@@ -101,6 +101,9 @@ partitioning, and Google Maps usage guardrails.
   decimal-dollar price amounts on writes. For example, `1999` from the PWA must
   be written to Medusa as `19.99`, not `1999`; otherwise the storefront renders
   prices as `$1,999.00`.
+- Inventory unit cost is separate from listed storefront price. The inventory
+  endpoint reads and writes variant metadata `unitPriceCents` for profit
+  calculations and must not map it to Medusa price sets.
 - The inventory endpoint must keep Medusa `inventory_level` rows in sync with
   variant `availableQuantity` metadata for managed variants. New variants and
   quantity edits should create or update stock at the `Bayblaze Local Delivery

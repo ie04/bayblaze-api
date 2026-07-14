@@ -142,6 +142,7 @@ type VariantDraft = {
   quantity?: number;
   sku?: string;
   title?: string;
+  unitPriceCents?: number;
   vehicleId?: string;
 };
 
@@ -995,6 +996,7 @@ function toInventoryVariant(product: Product, variant: ProductVariant) {
         inventoryState === "ON_VEHICLE" ? readString(metadata.assignedVehicleId) || undefined : undefined,
       barcode: barcode || undefined,
       brand: brand || undefined,
+      unitPriceCents: readQuantity(metadata.unitPriceCents),
     }),
     updatedAt: toIsoString(variant.updated_at),
   };
@@ -1016,6 +1018,10 @@ function toVariantMetadata(
       inventoryState === "ON_VEHICLE" ? readString(draft.vehicleId) || undefined : undefined,
     barcode: readString(draft.barcode) || undefined,
     brand: readString(draft.brand) || undefined,
+    unitPriceCents:
+      draft.unitPriceCents === undefined && !includeDefaults
+        ? undefined
+        : readQuantity(draft.unitPriceCents),
     imageUrl: imageUrls ? imageUrls[0] || null : undefined,
     imageUrls: imageUrls ?? undefined,
   });
