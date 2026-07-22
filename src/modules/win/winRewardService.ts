@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { forwardInventoryRequest } from "../../clients/medusaInventoryClient";
+import { getAdminOrderDetail } from "../../clients/medusaAdminClient";
 import { getBayblazeFirestore } from "../../clients/firebaseAdminClient";
 import { env } from "../../config/env";
 import {
@@ -13,10 +14,12 @@ import {
   normalizeDiscountCode,
   previewDiscountCode as previewSharedDiscountCode,
   recordAdminDiscountCodeUse,
+  referralPartnerPromoCodeCategory,
   serializeDiscountCode,
   type PreviewDiscountItem,
   winReferralCodeCategory,
 } from "../discountCodes/discountCodeService";
+import { getAccount } from "../accounts/accountService";
 import { ApiRequestError } from "../drivers/driverWorkflowService";
 import { completeWinReferral } from "./winReferralCompletionService";
 import type { FreebieProduct, WinRewardRecord, WinRewardStatus } from "./winTypes";
@@ -123,7 +126,14 @@ export async function claimCustomerWinFreebie(uid: string, input: ClaimFreebieIn
 
 export async function previewCustomerDiscountCode(uid: string, input: PreviewCustomerDiscountCodeInput) {
   const preview = await previewSharedDiscountCode(input);
-  if (preview.ownerUid && preview.ownerUid === uid) throw new ApiRequestError(409, "Send this friend code to someone else to unlock your freebie.");
+  if (preview.ownerUid && preview.ownerUid === uid) {
+    throw new ApiRequestError(
+      409,
+      preview.category === referralPartnerPromoCodeCategory
+        ? "You cannot use your own referral partner promo code."
+        : "Send this friend code to someone else to unlock your freebie.",
+    );
+  }
   if (preview.singleUsePerAccount && await hasCustomerUsedDiscountCode(uid, preview.code)) {
     throw new ApiRequestError(409, "That promo code has already been used by this account.");
   }
@@ -166,16 +176,76 @@ export async function recordCustomerDiscountCodeUse(uid: string, input: RecordCu
   }
 
   if (discountCode.category !== adminPromoCodeCategory) {
-    throw new ApiRequestError(409, "That promo code is not available for checkout.");
+    if (discountCode.category !== referralPartnerPromoCodeCategory) {
+      throw new ApiRequestError(409, "That promo code is not available for checkout.");
+    }
   }
+
+  const referralAttribution = discountCode.category === referralPartnerPromoCodeCategory
+    ? await getReferralOrderAttribution(uid, orderId, code)
+    : null;
 
   return recordAdminDiscountCodeUse({
     code,
-    customerEmail: input.customerEmail,
+    commissionCents: referralAttribution?.commissionCents,
+    commissionPercent: referralAttribution?.commissionPercent,
+    customerEmail: referralAttribution?.customerEmail || input.customerEmail,
     customerId: input.customerId,
+    discountCents: referralAttribution?.discountCents,
     orderId,
+    referredSpendCents: referralAttribution?.referredSpendCents,
+    subtotalCents: referralAttribution?.subtotalCents,
     uid,
   });
+}
+
+async function getReferralOrderAttribution(uid: string, orderId: string, code: string) {
+  const [account, order] = await Promise.all([
+    getAccount(uid),
+    getAdminOrderDetail(orderId).catch((caught) => {
+      throw new ApiRequestError(
+        502,
+        caught instanceof Error ? caught.message : "Could not verify the completed referral order.",
+      );
+    }),
+  ]);
+  const metadata = asRecord(order.metadata);
+  const orderEmail = readString(order.email).toLowerCase();
+
+  if (!account || !orderEmail || orderEmail !== account.email.toLowerCase()) {
+    throw new ApiRequestError(403, "That completed order does not belong to this BayBlaze account.");
+  }
+
+  if (
+    normalizeDiscountCode(metadata.checkout_promo_code) !== code ||
+    readString(metadata.checkout_promo_category) !== referralPartnerPromoCodeCategory ||
+    readString(metadata.checkout_promo_status) !== "applied"
+  ) {
+    throw new ApiRequestError(409, "That completed order does not contain this referral promo.");
+  }
+
+  const subtotalCents = readDollarMoneyCents(metadata.checkout_promo_subtotal);
+  const discountCents = readDollarMoneyCents(metadata.checkout_promo_discount_amount);
+  const referredSpendCents = readDollarMoneyCents(metadata.checkout_promo_total_after_discount);
+  const commissionPercent = readPositivePercent(metadata.checkout_referral_commission_percent);
+  const commissionCents = Math.round(referredSpendCents * (commissionPercent / 100));
+
+  if (subtotalCents <= 0 || referredSpendCents < 0 || discountCents < 0 || commissionPercent <= 0) {
+    throw new ApiRequestError(409, "That completed order is missing referral commission metadata.");
+  }
+
+  if (Math.max(0, subtotalCents - discountCents) !== referredSpendCents) {
+    throw new ApiRequestError(409, "That completed order has inconsistent referral totals.");
+  }
+
+  return {
+    commissionCents,
+    commissionPercent,
+    customerEmail: orderEmail,
+    discountCents,
+    referredSpendCents,
+    subtotalCents,
+  };
 }
 
 async function refreshRewardQualification(reward: WinRewardRecord) {
@@ -278,5 +348,14 @@ function normalizeReferralCode(value: unknown) { return normalizeDiscountCode(va
 function buildReferralUrl(referralCode: string) { const storefrontUrl = (env.BAYBLAZE_STOREFRONT_URL || "https://bayblaze.net").replace(/\/$/, ""); const params = new URLSearchParams({ promo: referralCode }); return `${storefrontUrl}/?${params.toString()}`; }
 function isRewardQualified(reward: WinRewardRecord) { return reward.status === "qualified" || reward.status === "claimed" || Boolean(reward.completedOrderId); }
 function serializeTimestamp(value: unknown) { if (value instanceof Timestamp) return value.toDate().toISOString(); if (typeof value === "string") return value; return null; }
+function asRecord(value: unknown) { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
+function readDollarMoneyCents(value: unknown) {
+  const amount = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+  return Number.isFinite(amount) && amount >= 0 ? Math.round(amount * 100) : -1;
+}
+function readPositivePercent(value: unknown) {
+  const percent = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+  return Number.isFinite(percent) && percent > 0 && percent <= 100 ? Math.round(percent * 100) / 100 : 0;
+}
 function readString(value: unknown) { return typeof value === "string" ? value.trim() : ""; }
 function removeUndefinedValues<T extends Record<string, unknown>>(value: T) { return Object.fromEntries(Object.entries(value).filter((entry) => entry[1] !== undefined)) as T; }

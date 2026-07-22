@@ -1,14 +1,18 @@
 import { forwardAdminOrderDeleteRequest, forwardAdminOrderDetailRequest, forwardAdminOrdersRequest } from "../../clients/medusaAdminClient";
 import { getBayblazeFirestore } from "../../clients/firebaseAdminClient";
 import { sendUpstreamJson } from "../../http/upstream";
-import { searchAccounts, updateAccountAccess } from "../accounts/accountService";
+import { getAccount, searchAccounts, updateAccountAccess } from "../accounts/accountService";
 import type { AccountBadge, AccountRole } from "../accounts/accountTypes";
 import {
   adminPromoCodeCategory,
   createDiscountCode,
   deleteDiscountCode,
+  getDiscountCode,
+  listDiscountCodeOrderUsages,
   listDiscountCodes,
   normalizeDiscountCode,
+  referralPartnerPromoCodeCategory,
+  serializeDiscountCode,
   updateDiscountCode,
   winReferralCodeCategory,
   type DiscountCodeType,
@@ -39,18 +43,23 @@ import type { Response as ExpressResponse } from "express";
 type AdminPromoCodeType = DiscountCodeType;
 
 type AdminPromoCodeInput = {
+  category?: typeof adminPromoCodeCategory | typeof referralPartnerPromoCodeCategory;
   code: string;
   codeType?: AdminPromoCodeType;
+  commissionPercent?: number;
   discountPercent?: number;
   minimumSpendCents?: number;
+  ownerUid?: string;
   singleUsePerAccount?: boolean;
 };
 
 type AdminPromoCodeUpdateInput = {
   code?: string;
   codeType?: AdminPromoCodeType;
+  commissionPercent?: number;
   discountPercent?: number;
   minimumSpendCents?: number;
+  ownerUid?: string;
   singleUsePerAccount?: boolean;
 };
 
@@ -58,7 +67,7 @@ export async function searchAdminAccounts(query: string, limit: number) {
   const accounts = await searchAccounts(query, limit);
 
   return {
-    accounts: await attachWinReferralSummaries(accounts),
+    accounts: await attachAccountReferralSummaries(accounts),
   };
 }
 
@@ -75,23 +84,50 @@ export async function updateAdminAccount(
   const account = await updateAccountAccess(uid, input);
 
   return {
-    account: (await attachWinReferralSummaries([account]))[0],
+    account: (await attachAccountReferralSummaries([account]))[0],
   };
 }
 
-async function attachWinReferralSummaries<T extends { uid: string }>(accounts: T[]) {
+async function attachAccountReferralSummaries<T extends { uid: string }>(accounts: T[]) {
   const summaries = await Promise.all(
-    accounts.map(async (account) => ({
-      uid: account.uid,
-      winReferrals: await listWinReferralSummaries(account.uid),
-    })),
+    accounts.map(async (account) => {
+      const [referralPromos, winReferrals] = await Promise.all([
+        listPartnerReferralPromoSummaries(account.uid),
+        listWinReferralSummaries(account.uid),
+      ]);
+
+      return { referralPromos, uid: account.uid, winReferrals };
+    }),
   );
-  const summariesByUid = new Map(summaries.map((summary) => [summary.uid, summary.winReferrals]));
+  const summariesByUid = new Map(summaries.map((summary) => [summary.uid, summary]));
 
   return accounts.map((account) => ({
     ...account,
-    winReferrals: summariesByUid.get(account.uid) ?? [],
+    referralPromos: summariesByUid.get(account.uid)?.referralPromos ?? [],
+    winReferrals: summariesByUid.get(account.uid)?.winReferrals ?? [],
   }));
+}
+
+async function listPartnerReferralPromoSummaries(uid: string) {
+  const snapshot = await getBayblazeFirestore()
+    .collection("customer_discount_codes")
+    .where("ownerUid", "==", uid)
+    .get();
+
+  return snapshot.docs
+    .map((doc) => serializeDiscountCode(doc.id, doc.data() ?? {}))
+    .filter((promo) => promo.category === referralPartnerPromoCodeCategory)
+    .map((promo) => ({
+      code: promo.code,
+      commissionPercent: promo.commissionPercent,
+      discountPercent: promo.discountPercent,
+      minimumSpendCents: promo.minimumSpendCents,
+      status: promo.status,
+      totalCommissionCents: promo.totalCommissionCents,
+      totalReferredSpendCents: promo.totalReferredSpendCents,
+      uniqueReferredCustomers: promo.uniqueReferredCustomers,
+      usedCount: promo.usedCount,
+    }));
 }
 
 async function listWinReferralSummaries(uid: string) {
@@ -158,8 +194,14 @@ function readString(value: unknown) {
 }
 
 export async function listAdminPromoCodes() {
+  const promoCodes = await listDiscountCodes([
+    adminPromoCodeCategory,
+    referralPartnerPromoCodeCategory,
+    winReferralCodeCategory,
+  ]);
+
   return {
-    promoCodes: await listDiscountCodes([adminPromoCodeCategory, winReferralCodeCategory]),
+    promoCodes: await Promise.all(promoCodes.map(enrichAdminPromoCode)),
   };
 }
 
@@ -170,18 +212,32 @@ export async function createAdminPromoCode(input: AdminPromoCodeInput) {
     throw new ApiRequestError(400, "Promo code is required.");
   }
 
+  if (input.category === referralPartnerPromoCodeCategory) {
+    const owner = input.ownerUid ? await getAccount(input.ownerUid) : null;
+
+    if (!owner) {
+      throw new ApiRequestError(400, "Select an existing BayBlaze account for this referral promo.");
+    }
+
+    if (owner.disabled) {
+      throw new ApiRequestError(409, "The selected referral partner account is disabled.");
+    }
+  }
+
   const promoCode = await createDiscountCode({
-    category: adminPromoCodeCategory,
+    category: input.category ?? adminPromoCodeCategory,
     code,
     codeType: input.codeType,
+    commissionPercent: input.commissionPercent,
     discountPercent: input.discountPercent,
     minimumSpendCents: input.minimumSpendCents,
+    ownerUid: input.ownerUid,
     singleUsePerAccount: input.singleUsePerAccount,
     usageLimit: 1000000,
   });
 
   return {
-    promoCode,
+    promoCode: await enrichAdminPromoCode(promoCode),
   };
 }
 
@@ -195,11 +251,34 @@ export async function updateAdminPromoCode(
     throw new ApiRequestError(400, "Promo code is required.");
   }
 
+  const currentPromoCode = await getDiscountCode(code);
+
+  if (![adminPromoCodeCategory, referralPartnerPromoCodeCategory].includes(currentPromoCode.category)) {
+    throw new ApiRequestError(409, "That promo code is managed by an automated rewards flow.");
+  }
+
+  if (
+    currentPromoCode.category === referralPartnerPromoCodeCategory &&
+    input.ownerUid &&
+    input.ownerUid !== currentPromoCode.ownerUid
+  ) {
+    throw new ApiRequestError(409, "A referral promo cannot be transferred to another account after creation.");
+  }
+
+  if (
+    currentPromoCode.category === referralPartnerPromoCodeCategory &&
+    currentPromoCode.usedCount > 0 &&
+    input.code &&
+    normalizeDiscountCode(input.code) !== code
+  ) {
+    throw new ApiRequestError(409, "A referral promo code cannot be renamed after it has tracked a purchase.");
+  }
+
   const promoCode = await updateDiscountCode(code, input, {
-    category: adminPromoCodeCategory,
+    category: currentPromoCode.category,
   });
 
-  return { promoCode };
+  return { promoCode: await enrichAdminPromoCode(promoCode) };
 }
 
 export async function deleteAdminPromoCode(codeInput: string) {
@@ -209,9 +288,39 @@ export async function deleteAdminPromoCode(codeInput: string) {
     throw new ApiRequestError(400, "Promo code is required.");
   }
 
-  await deleteDiscountCode(code, { category: adminPromoCodeCategory });
+  const promoCode = await getDiscountCode(code);
+
+  if (![adminPromoCodeCategory, referralPartnerPromoCodeCategory].includes(promoCode.category)) {
+    throw new ApiRequestError(409, "That promo code is managed by an automated rewards flow.");
+  }
+
+  if (promoCode.category === referralPartnerPromoCodeCategory && promoCode.usedCount > 0) {
+    throw new ApiRequestError(409, "A referral promo with tracked purchases cannot be deleted.");
+  }
+
+  await deleteDiscountCode(code, { category: promoCode.category });
 
   return { ok: true };
+}
+
+async function enrichAdminPromoCode(
+  promoCode: Awaited<ReturnType<typeof getDiscountCode>>,
+) {
+  if (promoCode.category !== referralPartnerPromoCodeCategory) {
+    return promoCode;
+  }
+
+  const [owner, referrals] = await Promise.all([
+    promoCode.ownerUid ? getAccount(promoCode.ownerUid) : null,
+    listDiscountCodeOrderUsages(promoCode.code),
+  ]);
+
+  return {
+    ...promoCode,
+    ownerDisplayName: owner?.displayName ?? "",
+    ownerEmail: owner?.email ?? "",
+    referrals,
+  };
 }
 
 export async function getAdminDriverMapState() {

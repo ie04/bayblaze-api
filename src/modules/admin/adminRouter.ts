@@ -49,6 +49,7 @@ const isochroneSchema = z.object({
 });
 
 const promoCodeTypeSchema = z.enum(["discount", "bogo"]);
+const promoCodeCategorySchema = z.enum(["admin_promo", "referral_partner"]);
 const emailAutomationEventTypeSchema = z.enum(["order_placed"]);
 const emailRecipientModeSchema = z.enum(["customer", "internal", "both"]);
 
@@ -92,23 +93,37 @@ const coverageAreaUpdateSchema = coverageAreaSchema.extend({
 });
 
 const promoCodeCreateSchema = z.object({
+  category: promoCodeCategorySchema.optional(),
   code: z.string().min(1),
   codeType: promoCodeTypeSchema.optional(),
+  commissionPercent: z.number().positive().max(100).optional(),
   discountPercent: z.number().positive().max(100).optional(),
   minimumSpendCents: z.number().int().nonnegative().optional(),
+  ownerUid: z.string().min(1).optional(),
   singleUsePerAccount: z.boolean().optional(),
 }).refine((value) => value.codeType === "bogo" || value.discountPercent !== undefined, {
   message: "Discount percent is required for percent-off promo codes.",
   path: ["discountPercent"],
+}).refine((value) => value.category !== "referral_partner" || value.codeType !== "bogo", {
+  message: "Referral partner promos must be percent-off promo codes.",
+  path: ["codeType"],
+}).refine((value) => value.category !== "referral_partner" || value.commissionPercent !== undefined, {
+  message: "Commission percent is required for referral partner promos.",
+  path: ["commissionPercent"],
+}).refine((value) => value.category !== "referral_partner" || value.ownerUid !== undefined, {
+  message: "A referral partner account is required.",
+  path: ["ownerUid"],
 });
 
 const promoCodeUpdateSchema = z.object({
   code: z.string().min(1).optional(),
   codeType: promoCodeTypeSchema.optional(),
+  commissionPercent: z.number().positive().max(100).optional(),
   discountPercent: z.number().positive().max(100).optional(),
   minimumSpendCents: z.number().int().nonnegative().optional(),
+  ownerUid: z.string().min(1).optional(),
   singleUsePerAccount: z.boolean().optional(),
-}).refine((value) => value.code !== undefined || value.codeType !== undefined || value.discountPercent !== undefined || value.minimumSpendCents !== undefined || value.singleUsePerAccount !== undefined, {
+}).refine((value) => value.code !== undefined || value.codeType !== undefined || value.commissionPercent !== undefined || value.discountPercent !== undefined || value.minimumSpendCents !== undefined || value.ownerUid !== undefined || value.singleUsePerAccount !== undefined, {
   message: "Promo code update requires at least one field.",
 });
 
@@ -270,10 +285,13 @@ export function createAdminRouter() {
     try {
       const parsed = promoCodeCreateSchema.parse(req.body ?? {});
       res.json(await createAdminPromoCode({
+        category: parsed.category,
         code: parsed.code,
         codeType: parsed.codeType,
+        commissionPercent: parsed.commissionPercent,
         discountPercent: parsed.discountPercent ?? 0,
         minimumSpendCents: parsed.minimumSpendCents,
+        ownerUid: parsed.ownerUid,
         singleUsePerAccount: parsed.singleUsePerAccount,
       }));
     } catch (caught) {

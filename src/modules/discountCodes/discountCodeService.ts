@@ -5,10 +5,12 @@ import { ApiRequestError } from "../drivers/driverWorkflowService";
 
 export const discountCodesCollection = "customer_discount_codes";
 export const adminPromoCodeCategory = "admin_promo";
+export const referralPartnerPromoCodeCategory = "referral_partner";
 export const winReferralCodeCategory = "win_referral";
 
 export type DiscountCodeCategory =
   | typeof adminPromoCodeCategory
+  | typeof referralPartnerPromoCodeCategory
   | typeof winReferralCodeCategory;
 
 export type DiscountCodeType = "discount" | "bogo";
@@ -20,6 +22,7 @@ export type DiscountCodeInput = {
   category: DiscountCodeCategory;
   code: string;
   codeType?: DiscountCodeType;
+  commissionPercent?: number;
   discountPercent?: number;
   minimumSpendCents?: number;
   ownerUid?: string;
@@ -37,6 +40,7 @@ export type DiscountCodeUpdateInput = {
   bogoFreeQuantity?: number;
   code?: string;
   codeType?: DiscountCodeType;
+  commissionPercent?: number;
   discountPercent?: number;
   minimumSpendCents?: number;
   singleUsePerAccount?: boolean;
@@ -66,6 +70,40 @@ export async function listDiscountCodes(categories: DiscountCodeCategory[]) {
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 
   return discountCodes;
+}
+
+export async function getDiscountCode(codeInput: string) {
+  const code = normalizeDiscountCode(codeInput);
+
+  if (!code) {
+    throw new ApiRequestError(400, "Promo code is required.");
+  }
+
+  const snapshot = await getBayblazeFirestore().collection(discountCodesCollection).doc(code).get();
+
+  if (!snapshot.exists) {
+    throw new ApiRequestError(404, "That promo code was not found.");
+  }
+
+  return serializeDiscountCode(snapshot.id, snapshot.data() ?? {});
+}
+
+export async function listDiscountCodeOrderUsages(codeInput: string) {
+  const code = normalizeDiscountCode(codeInput);
+
+  if (!code) {
+    return [];
+  }
+
+  const snapshot = await getBayblazeFirestore()
+    .collection(discountCodesCollection)
+    .doc(code)
+    .collection("order_usages")
+    .get();
+
+  return snapshot.docs
+    .map((doc) => serializeDiscountCodeOrderUsage(doc.id, doc.data() ?? {}))
+    .sort((left, right) => right.recordedAt.localeCompare(left.recordedAt));
 }
 
 export async function createDiscountCode(input: DiscountCodeInput) {
@@ -140,6 +178,15 @@ export async function updateDiscountCode(
     const nextDiscountPercent = input.discountPercent === undefined
       ? readDiscountPercent(currentData.discountPercent, nextCodeType)
       : normalizeDiscountPercentForType(input.discountPercent, nextCodeType);
+    const nextCommissionPercent = options.category === referralPartnerPromoCodeCategory
+      ? input.commissionPercent === undefined
+        ? normalizeCommissionPercent(currentData.commissionPercent)
+        : normalizeCommissionPercent(input.commissionPercent)
+      : 0;
+
+    if (options.category === referralPartnerPromoCodeCategory && nextCodeType !== "discount") {
+      throw new ApiRequestError(400, "Referral partner promos must be percent-off promo codes.");
+    }
     const nextMinimumSpendCents = input.minimumSpendCents === undefined
       ? normalizeInteger(currentData.minimumSpendCents)
       : normalizeMinimumSpendCents(input.minimumSpendCents);
@@ -150,6 +197,7 @@ export async function updateDiscountCode(
       ...currentData,
       code: nextCode,
       codeType: nextCodeType,
+      commissionPercent: nextCommissionPercent,
       discountPercent: nextDiscountPercent,
       minimumSpendCents: nextMinimumSpendCents,
       singleUsePerAccount: nextSingleUsePerAccount,
@@ -202,7 +250,11 @@ export async function previewDiscountCode(
   options: { categories?: DiscountCodeCategory[] } = {},
 ) {
   const code = normalizeDiscountCode(input.code);
-  const categories = options.categories ?? [adminPromoCodeCategory, winReferralCodeCategory];
+  const categories = options.categories ?? [
+    adminPromoCodeCategory,
+    referralPartnerPromoCodeCategory,
+    winReferralCodeCategory,
+  ];
   const hasSubtotal = input.subtotalCents !== undefined;
   const subtotalCents = normalizeMoneyCents(input.subtotalCents);
 
@@ -239,6 +291,7 @@ export async function previewDiscountCode(
       category: discountCode.category,
       code: discountCode.code,
       codeType: discountCode.codeType,
+      commissionPercent: discountCode.commissionPercent,
       discountAmountCents: 0,
       discountPercent: discountCode.discountPercent,
       eligible: false,
@@ -270,6 +323,7 @@ export async function previewDiscountCode(
     category: discountCode.category,
     code: discountCode.code,
     codeType: discountCode.codeType,
+    commissionPercent: discountCode.commissionPercent,
     discountAmountCents,
     discountPercent: discountCode.discountPercent,
     eligible: true,
@@ -287,6 +341,18 @@ export function buildDiscountCodeRecord(input: DiscountCodeInput) {
   const codeType = normalizeDiscountCodeType(input.codeType);
   const discountPercent = normalizeDiscountPercentForType(input.discountPercent, codeType);
   const usageLimit = normalizeInteger(input.usageLimit) || 1;
+  const ownerUid = readString(input.ownerUid) || readString(input.uid);
+  const commissionPercent = input.category === referralPartnerPromoCodeCategory
+    ? normalizeCommissionPercent(input.commissionPercent)
+    : 0;
+
+  if (input.category === referralPartnerPromoCodeCategory && !ownerUid) {
+    throw new ApiRequestError(400, "A referral partner account is required.");
+  }
+
+  if (input.category === referralPartnerPromoCodeCategory && codeType !== "discount") {
+    throw new ApiRequestError(400, "Referral partner promos must be percent-off promo codes.");
+  }
 
   return removeUndefinedValues({
     bogoBuyQuantity: codeType === "bogo" ? input.bogoBuyQuantity ?? 1 : undefined,
@@ -295,9 +361,10 @@ export function buildDiscountCodeRecord(input: DiscountCodeInput) {
     category: input.category,
     code,
     codeType,
+    commissionPercent,
     discountPercent,
     minimumSpendCents: normalizeMinimumSpendCents(input.minimumSpendCents),
-    ownerUid: readString(input.ownerUid) || undefined,
+    ownerUid: ownerUid || undefined,
     referralCode: normalizeDiscountCode(input.referralCode) || undefined,
     rewardId: readString(input.rewardId) || undefined,
     singleUsePerAccount: input.singleUsePerAccount === true,
@@ -319,6 +386,9 @@ export function serializeDiscountCode(id: string, data: Record<string, unknown>)
     category,
     code: normalizeDiscountCode(data.code) || normalizeDiscountCode(id),
     codeType,
+    commissionPercent: category === referralPartnerPromoCodeCategory
+      ? readCommissionPercent(data.commissionPercent)
+      : 0,
     discountPercent: readDiscountPercent(data.discountPercent, codeType),
     minimumSpendCents: normalizeInteger(data.minimumSpendCents),
     ownerUid: readString(data.ownerUid) || readString(data.uid),
@@ -329,6 +399,11 @@ export function serializeDiscountCode(id: string, data: Record<string, unknown>)
     uid: readString(data.uid),
     usageLimit: normalizeInteger(data.usageLimit) || 1,
     usedCount: normalizeInteger(data.usedCount),
+    totalCommissionCents: normalizeInteger(data.totalCommissionCents),
+    totalDiscountCents: normalizeInteger(data.totalDiscountCents),
+    totalReferredSpendCents: normalizeInteger(data.totalReferredSpendCents),
+    totalReferredSubtotalCents: normalizeInteger(data.totalReferredSubtotalCents),
+    uniqueReferredCustomers: normalizeInteger(data.uniqueReferredCustomers),
     createdAt: serializeTimestamp(data.createdAt),
     updatedAt: serializeTimestamp(data.updatedAt),
   };
@@ -355,9 +430,14 @@ export async function hasCustomerUsedDiscountCode(uid: string, codeInput: string
 
 export async function recordAdminDiscountCodeUse(input: {
   code: string;
+  commissionCents?: number;
+  commissionPercent?: number;
   customerEmail?: string;
   customerId?: string;
+  discountCents?: number;
   orderId: string;
+  referredSpendCents?: number;
+  subtotalCents?: number;
   uid: string;
 }) {
   const code = normalizeDiscountCode(input.code);
@@ -401,7 +481,7 @@ export async function recordAdminDiscountCodeUse(input: {
 
     const discountCode = serializeDiscountCode(codeSnapshot.id, codeSnapshot.data() ?? {});
 
-    if (discountCode.category !== adminPromoCodeCategory) {
+    if (![adminPromoCodeCategory, referralPartnerPromoCodeCategory].includes(discountCode.category)) {
       throw new ApiRequestError(409, "That promo code is not managed by this promo tool.");
     }
 
@@ -417,12 +497,33 @@ export async function recordAdminDiscountCodeUse(input: {
 
     const now = FieldValue.serverTimestamp();
     const nextUsedCount = discountCode.usedCount + 1;
+    const isReferralPartner = discountCode.category === referralPartnerPromoCodeCategory;
+    const subtotalCents = isReferralPartner ? normalizeMoneyCents(input.subtotalCents) : 0;
+    const discountCents = isReferralPartner ? normalizeMoneyCents(input.discountCents) : 0;
+    const referredSpendCents = isReferralPartner ? normalizeMoneyCents(input.referredSpendCents) : 0;
+    const commissionPercent = isReferralPartner
+      ? normalizeCommissionPercent(input.commissionPercent ?? discountCode.commissionPercent)
+      : 0;
+    const expectedCommissionCents = Math.round(referredSpendCents * (commissionPercent / 100));
+    const commissionCents = isReferralPartner
+      ? normalizeMoneyCents(input.commissionCents ?? expectedCommissionCents)
+      : 0;
+
+    if (isReferralPartner && commissionCents !== expectedCommissionCents) {
+      throw new ApiRequestError(409, "Referral commission does not match the completed order.");
+    }
+
     const usageRecord = removeUndefinedValues({
       code,
+      commissionCents,
+      commissionPercent,
       customerEmail: readString(input.customerEmail).toLowerCase() || undefined,
       customerId: readString(input.customerId) || undefined,
+      discountCents,
       orderId,
       recordedAt: now,
+      referredSpendCents,
+      subtotalCents,
       uid,
     });
 
@@ -436,6 +537,10 @@ export async function recordAdminDiscountCodeUse(input: {
         firstOrderId: accountUsageSnapshot.exists ? undefined : orderId,
         lastOrderId: orderId,
         lastUsedAt: now,
+        ...(isReferralPartner ? {
+          totalCommissionCents: FieldValue.increment(commissionCents),
+          totalReferredSpendCents: FieldValue.increment(referredSpendCents),
+        } : {}),
         uid,
         usedCount: FieldValue.increment(1),
       }),
@@ -445,6 +550,15 @@ export async function recordAdminDiscountCodeUse(input: {
       codeRef,
       {
         status: nextUsedCount >= discountCode.usageLimit ? "used" : "active",
+        ...(isReferralPartner ? {
+          totalCommissionCents: FieldValue.increment(commissionCents),
+          totalDiscountCents: FieldValue.increment(discountCents),
+          totalReferredSpendCents: FieldValue.increment(referredSpendCents),
+          totalReferredSubtotalCents: FieldValue.increment(subtotalCents),
+          ...(!accountUsageSnapshot.exists ? {
+            uniqueReferredCustomers: FieldValue.increment(1),
+          } : {}),
+        } : {}),
         updatedAt: now,
         usedCount: FieldValue.increment(1),
       },
@@ -506,7 +620,31 @@ export function removeUndefinedValues<T extends Record<string, unknown>>(value: 
 }
 
 function normalizeDiscountCodeCategory(value: unknown): DiscountCodeCategory {
-  return value === winReferralCodeCategory ? winReferralCodeCategory : adminPromoCodeCategory;
+  if (value === winReferralCodeCategory) {
+    return winReferralCodeCategory;
+  }
+
+  return value === referralPartnerPromoCodeCategory
+    ? referralPartnerPromoCodeCategory
+    : adminPromoCodeCategory;
+}
+
+function normalizeCommissionPercent(value: unknown) {
+  const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+
+  if (!Number.isFinite(number) || number <= 0 || number > 100) {
+    throw new ApiRequestError(400, "Commission percent must be between 1 and 100.");
+  }
+
+  return Math.round(number * 100) / 100;
+}
+
+function readCommissionPercent(value: unknown) {
+  const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
+
+  return Number.isFinite(number) && number > 0 && number <= 100
+    ? Math.round(number * 100) / 100
+    : 0;
 }
 
 function normalizeDiscountPercent(value: unknown) {
@@ -611,4 +749,20 @@ function serializeTimestamp(value: unknown) {
   }
 
   return "";
+}
+
+function serializeDiscountCodeOrderUsage(id: string, data: Record<string, unknown>) {
+  return {
+    code: normalizeDiscountCode(data.code),
+    commissionCents: normalizeInteger(data.commissionCents),
+    commissionPercent: readCommissionPercent(data.commissionPercent),
+    customerEmail: readString(data.customerEmail).toLowerCase(),
+    customerId: readString(data.customerId),
+    discountCents: normalizeInteger(data.discountCents),
+    orderId: readString(data.orderId) || id,
+    recordedAt: serializeTimestamp(data.recordedAt),
+    referredSpendCents: normalizeInteger(data.referredSpendCents),
+    subtotalCents: normalizeInteger(data.subtotalCents),
+    uid: readString(data.uid),
+  };
 }

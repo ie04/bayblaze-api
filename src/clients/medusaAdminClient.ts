@@ -26,6 +26,27 @@ export function forwardAdminOrderDetailRequest(orderId: string) {
   });
 }
 
+export async function getAdminOrderDetail(orderId: string) {
+  const response = await forwardAdminOrderDetailRequest(orderId);
+  const text = await response.text();
+  let payload: { message?: unknown; order?: Record<string, unknown> } = {};
+
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error("Medusa returned an invalid order response.");
+  }
+
+  if (!response.ok || !payload.order) {
+    const message = typeof payload.message === "string"
+      ? payload.message
+      : `Medusa order lookup failed with HTTP ${response.status}.`;
+    throw new Error(message);
+  }
+
+  return payload.order;
+}
+
 export function forwardAdminOrderCancelRequest(orderId: string) {
   const medusaBackendUrl = getMedusaBackendUrl();
   const basePath = env.MEDUSA_ADMIN_ORDERS_PATH.replace(/\/$/, "");

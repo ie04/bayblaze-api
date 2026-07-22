@@ -54,6 +54,17 @@ Medusa remains the source of truth for:
 * product images once committed to a product
 * product category metadata used by storefront/inventory sync
 
+Referral partner promos are unified discount records in
+`customer_discount_codes/{CODE}` with category `referral_partner`, an
+`ownerUid` pointing at an existing BayBlaze account, a customer discount
+percentage, a partner commission percentage, and an optional pre-tax product
+minimum. Each completed use is recorded idempotently under
+`order_usages/{orderId}` and aggregated on the promo. Commission is calculated
+in cents from the completed order's product total after the referral discount;
+the order's immutable promo metadata is verified against embedded Medusa before
+the ledger is updated. Prior order ledger entries keep their original
+commission percentage if the promo is edited later.
+
 Medusa source now lives inside this repository at `medusa/`. The previous
 standalone `bayblaze-medusa` repository is retired as an independent source of
 truth after the June 2026 consolidation. Make Medusa route/model/deployment
@@ -274,22 +285,22 @@ GET    /v1/admin/orders/:orderId
 DELETE /v1/admin/orders/:orderId
 ```
 
-`GET /v1/admin/accounts` and `PATCH /v1/admin/accounts/:uid` include
-`winReferrals` summaries on returned account objects for BayBlaze Win reward
-records owned by that UID. Each summary should expose referral generation,
-qualifying friend-code consumption, and referrer freebie claim consumption
-state without requiring the admin browser to read Firestore directly.
+`GET /v1/admin/accounts` and `PATCH /v1/admin/accounts/:uid` include both
+`winReferrals` and commercial `referralPromos` summaries on returned account
+objects. These expose friend-code/freebie state plus partner discount,
+commission, referred-customer, purchase, and spend totals without requiring the
+admin browser to read Firestore directly.
 
 Storefront promo codes share the API-owned discount code module in
 `src/modules/discountCodes/discountCodeService.ts` and Firestore collection
 `customer_discount_codes/{CODE}`. Admin-created promo records use
-`category: "admin_promo"`; BayBlaze Win friend-code records use
-`category: "win_referral"`. `GET /v1/admin/promo-codes` returns both categories
+`category: "admin_promo"`; individualized partner records use
+`category: "referral_partner"`; BayBlaze Win friend-code records use
+`category: "win_referral"`. `GET /v1/admin/promo-codes` returns all categories
 as the same serialized discount-code object so operators can see centralized
-promo usage, but only `admin_promo` records may be created, updated, or deleted
-through the admin routes.
-The public and customer discount preview endpoints accept both `win_referral`
-discount records and `admin_promo` records.
+promo usage. Admin routes may manage `admin_promo` and `referral_partner`
+records, while `win_referral` remains read-only and API-managed.
+The public and customer discount preview endpoints accept all three categories.
 Admin promo records may set `minimumSpendCents`; `0` disables the minimum. The
 discount preview endpoints enforce that basket minimum against the before-tax
 product subtotal and return `eligible=false` with
