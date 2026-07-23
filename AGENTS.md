@@ -1095,6 +1095,43 @@ allows BayBlaze app custom domains (`bayblaze.net`, `www.bayblaze.net`,
 origins matching `https://bayblaze-{admin,storefront,driver,inventory,win}*.vercel.app`
 so browser apps can call `https://api.bayblaze.net` without `Failed to fetch`
 CORS failures.
+
+## Referral Partner Production Model
+
+- Partner enrollment is one-to-one with the universal account UID in
+  `referral_partners/{uid}`. Statuses are `pending`, `active`, `suspended`, and
+  `rejected`; only active partners may use partner self-service data or receive
+  new attribution.
+- Referral promo codes remain `customer_discount_codes/{CODE}` records with
+  category `referral_partner`. `referral_partner_codes/{CODE}` is the unique,
+  case-normalized code-to-partner index. Codes are stable after approval.
+- Signed first-party attribution is created by `POST /v1/partners/attributions`
+  and stored by the storefront in an HttpOnly `bayblaze_partner_attribution`
+  cookie. The configured first valid touch wins for the attribution window. An
+  explicitly applied valid partner promo can still credit its order when no
+  valid cookie exists; the browser never supplies a partner UID.
+- Trusted Medusa lifecycle subscribers call `POST /v1/partners/order-events`.
+  Referral documents live at
+  `referral_partners/{uid}/referrals/{orderId}` with immutable history below
+  `history`. The order ID is the idempotency boundary.
+- Commission money is integer cents and rates are integer basis points.
+  Qualifying basis is the checkout product total after promo discount; taxes,
+  tips, delivery charges, and other fees are excluded. Refund dollars
+  conservatively reduce product basis first.
+- Commission statuses are `tracked`, `pending`, `eligible`, `paid`, and
+  `reversed`. Cancellations, failed payments, chargebacks, and full/partial
+  refunds recalculate or reverse the financial record and append audit history.
+- Payouts are persisted under `referral_partners/{uid}/payouts`. There is no
+  payout provider: the admin route records an already completed external payout
+  and offsets outstanding clawbacks, but never initiates money movement.
+- Required production secrets are `PARTNER_ATTRIBUTION_TOKEN_SECRET` and
+  `PARTNER_CUSTOMER_HASH_SECRET` (32+ characters and distinct in operations).
+  Configurable rules are `PARTNER_ATTRIBUTION_WINDOW_DAYS` (default 30),
+  `PARTNER_COMMISSION_ELIGIBILITY_DAYS` (default 7), and
+  `PARTNER_REFERRAL_CODE_PREFIX` (default `LOCAL`).
+- `src/migrations/20260722ReferralPartners.ts` is dry-run by default, blocks
+  one-to-many legacy owner conflicts, preserves existing promo codes, and is
+  idempotently applied during deployment before runtime recreation.
 After changes that affect an admin screen, wait for the relevant deploy to
 finish and smoke-test the deployed screen plus its API preflight from both
 `https://admin.bayblaze.net` and the active Vercel preview origin when one is

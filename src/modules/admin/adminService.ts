@@ -37,6 +37,7 @@ import {
   type EmailAutomationTestInput,
   type EmailAutomationUpdateInput,
 } from "../email/emailAutomationService";
+import { createActivePartnerWithPromo, updateAdminPartnerStatus } from "../partners/partnerService";
 import { geocodeAddress } from "../isochronos/googleMapsService";
 import type { Response as ExpressResponse } from "express";
 
@@ -222,6 +223,17 @@ export async function createAdminPromoCode(input: AdminPromoCodeInput) {
     if (owner.disabled) {
       throw new ApiRequestError(409, "The selected referral partner account is disabled.");
     }
+
+    const promoCode = await createActivePartnerWithPromo({
+      code,
+      commissionPercent: input.commissionPercent ?? 0,
+      discountPercent: input.discountPercent ?? 0,
+      minimumSpendCents: input.minimumSpendCents,
+      ownerUid: input.ownerUid!,
+      singleUsePerAccount: input.singleUsePerAccount,
+    });
+
+    return { promoCode: await enrichAdminPromoCode(promoCode) };
   }
 
   const promoCode = await createDiscountCode({
@@ -267,11 +279,10 @@ export async function updateAdminPromoCode(
 
   if (
     currentPromoCode.category === referralPartnerPromoCodeCategory &&
-    currentPromoCode.usedCount > 0 &&
     input.code &&
     normalizeDiscountCode(input.code) !== code
   ) {
-    throw new ApiRequestError(409, "A referral promo code cannot be renamed after it has tracked a purchase.");
+    throw new ApiRequestError(409, "A partner referral code is stable and cannot be renamed.");
   }
 
   const promoCode = await updateDiscountCode(code, input, {
@@ -296,6 +307,10 @@ export async function deleteAdminPromoCode(codeInput: string) {
 
   if (promoCode.category === referralPartnerPromoCodeCategory && promoCode.usedCount > 0) {
     throw new ApiRequestError(409, "A referral promo with tracked purchases cannot be deleted.");
+  }
+
+  if (promoCode.category === referralPartnerPromoCodeCategory && promoCode.ownerUid) {
+    await updateAdminPartnerStatus(promoCode.ownerUid, "rejected");
   }
 
   await deleteDiscountCode(code, { category: promoCode.category });

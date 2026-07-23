@@ -14,6 +14,8 @@
     "build:all": "npm run api:build && npm run medusa:build",
     "start": "node dist/server.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test test/**/*.test.ts",
+    "migrate:referral-partners": "tsx src/migrations/20260722ReferralPartners.ts",
     "medusa:install": "npm install --prefix medusa",
     "medusa:dev": "npm run backend:dev --prefix medusa",
     "medusa:build": "npm run build -w @dtc/backend --prefix medusa",

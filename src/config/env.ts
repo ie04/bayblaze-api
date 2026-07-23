@@ -30,6 +30,11 @@ const envSchema = z
     MEDUSA_CUSTOMER_SESSION_PATH: z.string().optional().default("/admin/bayblaze/customer-sessions"),
 
     BAYBLAZE_STOREFRONT_URL: z.string().optional().default("https://bayblaze.net"),
+    PARTNER_ATTRIBUTION_WINDOW_DAYS: z.coerce.number().int().min(1).max(365).optional().default(30),
+    PARTNER_COMMISSION_ELIGIBILITY_DAYS: z.coerce.number().int().min(0).max(365).optional().default(7),
+    PARTNER_ATTRIBUTION_TOKEN_SECRET: z.string().optional(),
+    PARTNER_CUSTOMER_HASH_SECRET: z.string().optional(),
+    PARTNER_REFERRAL_CODE_PREFIX: z.string().optional().default("LOCAL"),
 
     GOOGLE_MAPS_API_KEY: z.string().optional(),
     GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
@@ -65,7 +70,26 @@ const envSchema = z
     BAYBLAZE_UPLOAD_DIR: z.string().optional().default("/app/uploads"),
     BAYBLAZE_PUBLIC_API_URL: z.string().optional(),
   })
-  .passthrough();
+  .passthrough()
+  .superRefine((value, context) => {
+    if (value.NODE_ENV !== "production") return;
+    for (const key of ["PARTNER_ATTRIBUTION_TOKEN_SECRET", "PARTNER_CUSTOMER_HASH_SECRET"] as const) {
+      if (!value[key] || value[key]!.length < 32) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${key} must be at least 32 characters in production.`,
+          path: [key],
+        });
+      }
+    }
+    if (value.PARTNER_ATTRIBUTION_TOKEN_SECRET === value.PARTNER_CUSTOMER_HASH_SECRET) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Partner attribution and customer hash secrets must be different.",
+        path: ["PARTNER_CUSTOMER_HASH_SECRET"],
+      });
+    }
+  });
 
 const parsed = envSchema.safeParse(process.env);
 

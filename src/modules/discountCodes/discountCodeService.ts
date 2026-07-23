@@ -270,6 +270,13 @@ export async function previewDiscountCode(
 
   const discountCode = serializeDiscountCode(snapshot.id, snapshot.data() ?? {});
 
+  if (
+    discountCode.category === referralPartnerPromoCodeCategory &&
+    discountCode.status !== "active"
+  ) {
+    throw new ApiRequestError(409, "That partner promo code is not active.");
+  }
+
   if (!categories.includes(discountCode.category)) {
     throw new ApiRequestError(409, "That promo code is not available for checkout.");
   }
@@ -485,7 +492,7 @@ export async function recordAdminDiscountCodeUse(input: {
       throw new ApiRequestError(409, "That promo code is not managed by this promo tool.");
     }
 
-    if (discountCode.status === "used" || discountCode.usedCount >= discountCode.usageLimit) {
+    if (discountCode.status !== "active" || discountCode.usedCount >= discountCode.usageLimit) {
       throw new ApiRequestError(409, "That promo code has already been used.");
     }
 

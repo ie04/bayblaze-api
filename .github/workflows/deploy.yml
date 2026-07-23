@@ -61,6 +61,8 @@ jobs:
           grep -q '^JWT_SECRET=' "$DEPLOY_DIR/.env.production"
           grep -q '^COOKIE_SECRET=' "$DEPLOY_DIR/.env.production"
           grep -q '^BAYBLAZE_MEDUSA_SERVICE_TOKEN=' "$DEPLOY_DIR/.env.production"
+          grep -q '^PARTNER_ATTRIBUTION_TOKEN_SECRET=' "$DEPLOY_DIR/.env.production"
+          grep -q '^PARTNER_CUSTOMER_HASH_SECRET=' "$DEPLOY_DIR/.env.production"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -71,6 +73,7 @@ jobs:
       - name: Build TypeScript
         run: |
           npm ci
+          npm test
           npm run build
 
       - name: Sync release to stable app directory
@@ -109,6 +112,11 @@ jobs:
         working-directory: ${{ env.DEPLOY_DIR }}
         run: |
           docker compose -p bayblaze-api -f docker-compose.prod.yml run --rm medusa npx medusa db:migrate
+
+      - name: Run referral partner migration
+        working-directory: ${{ env.DEPLOY_DIR }}
+        run: |
+          docker compose -p bayblaze-api -f docker-compose.prod.yml run --rm bayblaze-api node dist/migrations/20260722ReferralPartners.js --apply
 
       - name: Recreate BayBlaze API runtime
         working-directory: ${{ env.DEPLOY_DIR }}

@@ -20,7 +20,7 @@ function getFirebaseApp() {
 
   const credential = readServiceAccountCredential();
   app = initializeApp({
-    credential,
+    ...(credential ? { credential } : {}),
     projectId: env.FIREBASE_PROJECT_ID || undefined,
     storageBucket: env.FIREBASE_STORAGE_BUCKET || undefined,
   });
