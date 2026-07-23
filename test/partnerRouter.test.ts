@@ -94,3 +94,41 @@ test("partner activity contracts expose privacy-safe customer labels only", () =
   assert.equal("partnerUid" in activity, false);
   assert.equal("referralCode" in activity, false);
 });
+
+test("trusted order events require a configured service token", async () => {
+  const previous = process.env.BAYBLAZE_MEDUSA_SERVICE_TOKEN;
+  process.env.BAYBLAZE_MEDUSA_SERVICE_TOKEN = "partner-router-test-token";
+  let called = false;
+  const app = express();
+  app.use(express.json());
+  app.use("/v1", createPartnerRouter({
+    services: {
+      recordPartnerOrderEvent: (async () => { called = true; return { ignored: true, reason: "not_partner_promo" }; }) as never,
+    },
+  }));
+  const server = app.listen(0);
+  await once(server, "listening");
+  const address = server.address();
+  assert(address && typeof address === "object");
+  const body = JSON.stringify({ eventId: "event-1", eventType: "order_placed", order: { id: "order-1", metadata: {} } });
+
+  try {
+    const unauthorized = await fetch(`http://127.0.0.1:${address.port}/v1/partners/order-events`, {
+      body, headers: { "content-type": "application/json" }, method: "POST",
+    });
+    assert.equal(unauthorized.status, 401);
+    assert.equal(called, false);
+    const authorized = await fetch(`http://127.0.0.1:${address.port}/v1/partners/order-events`, {
+      body,
+      headers: { "content-type": "application/json", "x-bayblaze-service-token": "partner-router-test-token" },
+      method: "POST",
+    });
+    assert.equal(authorized.status, 200);
+    assert.equal(called, true);
+  } finally {
+    if (previous === undefined) delete process.env.BAYBLAZE_MEDUSA_SERVICE_TOKEN;
+    else process.env.BAYBLAZE_MEDUSA_SERVICE_TOKEN = previous;
+    server.close();
+    await once(server, "close");
+  }
+});

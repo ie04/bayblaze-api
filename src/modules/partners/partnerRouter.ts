@@ -283,12 +283,17 @@ function requirePartnerEventServiceToken(req: AccountAuthedRequest, res: Respons
   const allowedTokens = [
     process.env.BAYBLAZE_API_SERVICE_TOKEN,
     process.env.BAYBLAZE_MEDUSA_SERVICE_TOKEN,
-  ].map(readParam).filter(Boolean);
+  ].map(readOptionalString).filter(Boolean);
   const authorization = typeof req.headers.authorization === "string" ? req.headers.authorization.trim() : "";
   const bearer = authorization.toLowerCase().startsWith("bearer ") ? authorization.slice(7).trim() : "";
-  const provided = bearer || readParam(req.headers["x-bayblaze-api-token"]) || readParam(req.headers["x-bayblaze-service-token"]);
+  const provided = bearer || readOptionalString(req.headers["x-bayblaze-api-token"]) || readOptionalString(req.headers["x-bayblaze-service-token"]);
 
   if (!allowedTokens.length) return res.status(503).json({ message: "Partner event service auth is not configured." });
   if (!allowedTokens.includes(provided)) return res.status(401).json({ message: "Unauthorized partner event request." });
   return next();
+}
+
+function readOptionalString(value: unknown) {
+  const result = Array.isArray(value) ? value[0] : value;
+  return typeof result === "string" ? result.trim() : "";
 }
