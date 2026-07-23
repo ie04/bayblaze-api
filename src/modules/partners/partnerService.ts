@@ -414,21 +414,33 @@ export async function recordPartnerOrderEvent(event: PartnerOrderEvent) {
     if (currentPartner?.status !== "active" && !existing) {
       return { ignored: true, reason: "partner_not_active" };
     }
-    const qualifyingEvent = event.eventType === "order_completed" || event.eventType === "payment_captured";
-    const eligibilityAt = qualifyingEvent
-      ? getEligibilityDate(eventAt, env.PARTNER_COMMISSION_ELIGIBILITY_DAYS)
+    const paymentCapturedAt = event.eventType === "payment_captured"
+      ? eventAt
+      : parseDate(existing?.paymentCapturedAt);
+    const orderCompletedAt = event.eventType === "order_completed"
+      ? eventAt
+      : parseDate(existing?.orderCompletedAt);
+    const isQualified = Boolean(paymentCapturedAt && orderCompletedAt);
+    const qualifiedAt = paymentCapturedAt && orderCompletedAt
+      ? new Date(Math.max(paymentCapturedAt.getTime(), orderCompletedAt.getTime()))
+      : null;
+    const eligibilityAt = qualifiedAt
+      ? getEligibilityDate(qualifiedAt, env.PARTNER_COMMISSION_ELIGIBILITY_DAYS)
       : existing?.eligibilityAt
         ? new Date(existing.eligibilityAt)
         : getEligibilityDate(eventAt, env.PARTNER_COMMISSION_ELIGIBILITY_DAYS);
-    const initialStatus: CommissionStatus = qualifyingEvent
+    const initialStatus: CommissionStatus = isQualified
       ? eventAt >= eligibilityAt ? "eligible" : "pending"
       : "tracked";
+    const lifecycleEventType = isQualified || ["chargeback", "order_canceled", "payment_failed", "payment_refunded"].includes(event.eventType)
+      ? event.eventType
+      : "order_placed";
     const lifecycle = getCommissionLifecycleUpdate({
       commissionCents: calculation.commissionCents,
       currentStatus: existing?.status ?? initialStatus,
       eligibilityAt,
       eventAt,
-      eventType: event.eventType,
+      eventType: lifecycleEventType,
       paidCommissionCents: existing?.paidCommissionCents,
     });
     const now = FieldValue.serverTimestamp();
@@ -447,11 +459,13 @@ export async function recordPartnerOrderEvent(event: PartnerOrderEvent) {
       eligibilityAt: Timestamp.fromDate(eligibilityAt),
       eligibleAt: lifecycle.status === "eligible" ? existing?.eligibleAt || now : existing?.eligibleAt || null,
       orderId: event.order.id,
+      orderCompletedAt: orderCompletedAt ? Timestamp.fromDate(orderCompletedAt) : null,
       orderStatus: getOrderStatus(event),
       originalCommissionCents: existing?.originalCommissionCents ?? calculation.commissionCents,
       originalQualifyingSubtotalCents: existing?.originalQualifyingSubtotalCents ?? originalBasis,
       paidCommissionCents: existing?.paidCommissionCents ?? 0,
       partnerUid: partner.uid,
+      paymentCapturedAt: paymentCapturedAt ? Timestamp.fromDate(paymentCapturedAt) : null,
       payoutId: existing?.payoutId || "",
       qualifyingSubtotalCents: calculation.qualifyingSubtotalCents,
       referralCode: code,
@@ -774,11 +788,13 @@ function serializeCommission(id: string, data: Record<string, unknown>): Partner
     eligibilityAt: serializeDate(data.eligibilityAt),
     eligibleAt: serializeDate(data.eligibleAt),
     orderId: readString(data.orderId) || id,
+    orderCompletedAt: serializeDate(data.orderCompletedAt),
     orderStatus: readString(data.orderStatus),
     originalCommissionCents: readInteger(data.originalCommissionCents),
     originalQualifyingSubtotalCents: readInteger(data.originalQualifyingSubtotalCents),
     paidCommissionCents: readInteger(data.paidCommissionCents),
     partnerUid: readString(data.partnerUid),
+    paymentCapturedAt: serializeDate(data.paymentCapturedAt),
     payoutId: readString(data.payoutId),
     qualifyingSubtotalCents: readInteger(data.qualifyingSubtotalCents),
     referralCode: normalizePartnerCode(data.referralCode),

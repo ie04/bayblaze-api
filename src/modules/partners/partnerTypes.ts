@@ -46,11 +46,13 @@ export type PartnerCommissionRecord = {
   eligibilityAt: string;
   eligibleAt: string;
   orderId: string;
+  orderCompletedAt: string;
   orderStatus: string;
   originalCommissionCents: number;
   originalQualifyingSubtotalCents: number;
   paidCommissionCents: number;
   partnerUid: string;
+  paymentCapturedAt: string;
   payoutId: string;
   qualifyingSubtotalCents: number;
   referralCode: string;

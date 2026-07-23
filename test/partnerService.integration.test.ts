@@ -96,7 +96,9 @@ test("persistent partner authorization, attribution, commissions, refunds, and p
   const duplicate = await recordPartnerOrderEvent({ eventId: `placed-${suffix}`, eventType: "order_placed", order });
   assert.equal(duplicate.duplicate, true);
   const captured = await recordPartnerOrderEvent({ eventId: `captured-${suffix}`, eventType: "payment_captured", order });
-  assert.equal(captured.status, "eligible");
+  assert.equal(captured.status, "tracked");
+  const completed = await recordPartnerOrderEvent({ eventId: `completed-${suffix}`, eventType: "order_completed", order });
+  assert.equal(completed.status, "eligible");
 
   const referrals = await listPartnerReferrals(partnerUid, { limit: 10, query: "", status: "eligible" });
   assert.equal(referrals.total, 1);
@@ -132,6 +134,7 @@ test("persistent partner authorization, attribution, commissions, refunds, and p
 
   const nextOrder = { ...order, id: `order-next-${suffix}` };
   await recordPartnerOrderEvent({ eventId: `captured-next-${suffix}`, eventType: "payment_captured", order: nextOrder });
+  await recordPartnerOrderEvent({ eventId: `completed-next-${suffix}`, eventType: "order_completed", order: nextOrder });
   const earningsWithClawback = await getPartnerEarnings(partnerUid);
   assert.equal(earningsWithClawback.earnings.availableCents, 1_200);
   const offsetPayout = await recordAdminExternalPayout(partnerUid, {

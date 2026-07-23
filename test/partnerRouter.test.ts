@@ -84,7 +84,8 @@ test("partner activity contracts expose privacy-safe customer labels only", () =
     createdAt: "2026-07-01T00:00:00.000Z", currency: "usd", customerLabel: "Customer ··9F2A",
     customerRef: "private-hash", eligibilityAt: "2026-07-08T00:00:00.000Z", eligibleAt: "",
     orderId: "order_123", orderStatus: "processing", originalCommissionCents: 300,
-    originalQualifyingSubtotalCents: 1000, paidCommissionCents: 0, partnerUid: "partner-a", payoutId: "",
+    orderCompletedAt: "2026-07-01T01:00:00.000Z", originalQualifyingSubtotalCents: 1000,
+    paidCommissionCents: 0, partnerUid: "partner-a", paymentCapturedAt: "2026-07-01T00:30:00.000Z", payoutId: "",
     qualifyingSubtotalCents: 1000, referralCode: "LOCAL-12345", refundedCents: 0, status: "pending",
     updatedAt: "2026-07-01T00:00:00.000Z",
   };
