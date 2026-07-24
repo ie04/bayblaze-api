@@ -37,7 +37,7 @@ import {
   type EmailAutomationTestInput,
   type EmailAutomationUpdateInput,
 } from "../email/emailAutomationService";
-import { createActivePartnerWithPromo, updateAdminPartnerStatus } from "../partners/partnerService";
+import { createActivePartnerWithPromo, deleteUnusedPartnerReferralPromo } from "../partners/partnerService";
 import { geocodeAddress } from "../isochronos/googleMapsService";
 import type { Response as ExpressResponse } from "express";
 
@@ -305,12 +305,8 @@ export async function deleteAdminPromoCode(codeInput: string) {
     throw new ApiRequestError(409, "That promo code is managed by an automated rewards flow.");
   }
 
-  if (promoCode.category === referralPartnerPromoCodeCategory && promoCode.usedCount > 0) {
-    throw new ApiRequestError(409, "A referral promo with tracked purchases cannot be deleted.");
-  }
-
-  if (promoCode.category === referralPartnerPromoCodeCategory && promoCode.ownerUid) {
-    await updateAdminPartnerStatus(promoCode.ownerUid, "rejected");
+  if (promoCode.category === referralPartnerPromoCodeCategory) {
+    return deleteUnusedPartnerReferralPromo(code);
   }
 
   await deleteDiscountCode(code, { category: promoCode.category });

@@ -1106,6 +1106,9 @@ CORS failures.
   records accepted partner terms and creates a `pending` partner profile without
   a referral code. BayBlaze manually creates the referral-promo coupon through
   the admin flow; that code assignment activates the dashboard and attribution.
+- Deleting an unused partner referral promo from admin must clear the
+  `referral_partners/{uid}.referralCode`, delete `referral_partner_codes/{CODE}`,
+  and return the partner to `pending` so a replacement coupon can be assigned.
 - Referral promo codes remain `customer_discount_codes/{CODE}` records with
   category `referral_partner`. `referral_partner_codes/{CODE}` is the unique,
   case-normalized code-to-partner index. Codes are stable after approval.

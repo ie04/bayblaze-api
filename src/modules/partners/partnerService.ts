@@ -137,9 +137,10 @@ export async function createActivePartnerWithPromo(input: {
   const indexRef = db.collection(partnerCodeIndexCollection).doc(code);
 
   await db.runTransaction(async (transaction) => {
+    const partnerSnapshotPromise = transaction.get(ownerRef);
     const [promoSnapshot, partnerSnapshot, indexSnapshot] = await Promise.all([
       transaction.get(promoRef),
-      transaction.get(ownerRef),
+      partnerSnapshotPromise,
       transaction.get(indexRef),
     ]);
     if (promoSnapshot.exists || indexSnapshot.exists) {
@@ -148,11 +149,22 @@ export async function createActivePartnerWithPromo(input: {
     const existing = partnerSnapshot.exists
       ? serializePartner(partnerSnapshot.id, partnerSnapshot.data() ?? {})
       : null;
+    let staleIndexRef: FirebaseFirestore.DocumentReference | null = null;
     if (existing?.referralCode && existing.referralCode !== code) {
-      throw new ApiRequestError(409, "This account already has a stable referral code.");
+      const existingIndexRef = db.collection(partnerCodeIndexCollection).doc(existing.referralCode);
+      const [existingPromoSnapshot, existingIndexSnapshot] = await Promise.all([
+        transaction.get(db.collection(discountCodesCollection).doc(existing.referralCode)),
+        transaction.get(existingIndexRef),
+      ]);
+      const existingIndexPartnerUid = readString((existingIndexSnapshot.data() ?? {}).partnerUid);
+      if (existingPromoSnapshot.exists || (existingIndexSnapshot.exists && existingIndexPartnerUid !== input.ownerUid)) {
+        throw new ApiRequestError(409, "This account already has a stable referral code.");
+      }
+      staleIndexRef = existingIndexSnapshot.exists ? existingIndexRef : null;
     }
     const now = FieldValue.serverTimestamp();
     transaction.create(promoRef, codeRecord);
+    if (staleIndexRef) transaction.delete(staleIndexRef);
     transaction.set(ownerRef, {
       approvedAt: now,
       createdAt: existing?.createdAt || now,
@@ -175,6 +187,63 @@ export async function createActivePartnerWithPromo(input: {
   });
 
   return serializeDiscountCode(code, codeRecord);
+}
+
+export async function deleteUnusedPartnerReferralPromo(codeInput: string) {
+  const code = normalizePartnerCode(codeInput);
+
+  if (!code) {
+    throw new ApiRequestError(400, "Promo code is required.");
+  }
+
+  const db = getBayblazeFirestore();
+  const promoRef = db.collection(discountCodesCollection).doc(code);
+  const indexRef = db.collection(partnerCodeIndexCollection).doc(code);
+
+  await db.runTransaction(async (transaction) => {
+    const [promoSnapshot, indexSnapshot] = await Promise.all([
+      transaction.get(promoRef),
+      transaction.get(indexRef),
+    ]);
+
+    if (!promoSnapshot.exists) {
+      throw new ApiRequestError(404, "That promo code was not found.");
+    }
+
+    const promo = serializeDiscountCode(code, promoSnapshot.data() ?? {});
+
+    if (promo.category !== referralPartnerPromoCodeCategory) {
+      throw new ApiRequestError(409, "That promo code is not managed by the referral partner tool.");
+    }
+
+    if (promo.usedCount > 0) {
+      throw new ApiRequestError(409, "A referral promo with tracked purchases cannot be deleted.");
+    }
+
+    const partnerUid = promo.ownerUid || readString((indexSnapshot.data() ?? {}).partnerUid);
+    const partnerDoc = partnerUid ? db.collection(partnersCollection).doc(partnerUid) : null;
+    const partnerSnapshot = partnerDoc ? await transaction.get(partnerDoc) : null;
+    const partner = partnerSnapshot?.exists
+      ? serializePartner(partnerSnapshot.id, partnerSnapshot.data() ?? {})
+      : null;
+    const now = FieldValue.serverTimestamp();
+
+    transaction.delete(promoRef);
+    if (indexSnapshot.exists) transaction.delete(indexRef);
+
+    if (partnerDoc && partner?.referralCode === code) {
+      transaction.set(partnerDoc, {
+        approvedAt: null,
+        referralCode: "",
+        rejectedAt: null,
+        status: "pending",
+        suspendedAt: null,
+        updatedAt: now,
+      }, { merge: true });
+    }
+  });
+
+  return { ok: true };
 }
 
 export async function listAdminPartners() {
