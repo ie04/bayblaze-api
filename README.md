@@ -55,9 +55,22 @@ Production partner configuration:
 PARTNER_ATTRIBUTION_WINDOW_DAYS=30
 PARTNER_COMMISSION_ELIGIBILITY_DAYS=7
 PARTNER_REFERRAL_CODE_PREFIX=LOCAL
+PARTNER_SELF_ENROLLMENT_DISCOUNT_PERCENT=20
+PARTNER_SELF_ENROLLMENT_COMMISSION_PERCENT=30
+PARTNER_SELF_ENROLLMENT_MINIMUM_SPEND_CENTS=0
+PARTNER_SELF_ENROLLMENT_SINGLE_USE_PER_ACCOUNT=false
+PARTNER_TERMS_VERSION=2026-07-23
 PARTNER_ATTRIBUTION_TOKEN_SECRET=<at-least-32-random-characters>
 PARTNER_CUSTOMER_HASH_SECRET=<different-at-least-32-random-characters>
 ```
+
+Customer accounts self-enroll through `POST /v1/partners/me/enrollment`.
+Enrollment immediately creates the account's partner record in `pending` status
+without a referral code. BayBlaze manually assigns the stable coupon code through
+the admin referral-promo flow, which activates the partner dashboard and
+attribution. The request must explicitly accept the current partner terms; the
+API records the server-configured terms version and acceptance timestamp.
+Suspended and rejected records cannot self-reactivate.
 
 The migration is dry-run by default and refuses ambiguous owners with more than
 one legacy referral promo:

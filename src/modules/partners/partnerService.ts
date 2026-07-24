@@ -45,6 +45,13 @@ const referralsSubcollection = "referrals";
 const payoutsSubcollection = "payouts";
 
 export async function submitPartnerApplication(uid: string) {
+  return enrollPartnerAccount(uid);
+}
+
+export async function enrollPartnerAccount(uid: string, input: { acceptedTerms?: boolean } = {}) {
+  if (input.acceptedTerms === false) {
+    throw new ApiRequestError(400, "Partner terms must be accepted before enrollment.");
+  }
   const account = await requireCustomerAccount(uid);
   const ref = partnerRef(uid);
   const existing = await ref.get();
@@ -58,8 +65,11 @@ export async function submitPartnerApplication(uid: string) {
     createdAt: now,
     displayName: account.displayName,
     email: account.email,
+    enrolledAt: now,
     referralCode: "",
     status: "pending",
+    termsAcceptedAt: input.acceptedTerms ? now : null,
+    termsVersion: input.acceptedTerms ? env.PARTNER_TERMS_VERSION : null,
     uid,
     updatedAt: now,
   });

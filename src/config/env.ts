@@ -35,6 +35,11 @@ const envSchema = z
     PARTNER_ATTRIBUTION_TOKEN_SECRET: z.string().optional(),
     PARTNER_CUSTOMER_HASH_SECRET: z.string().optional(),
     PARTNER_REFERRAL_CODE_PREFIX: z.string().optional().default("LOCAL"),
+    PARTNER_SELF_ENROLLMENT_COMMISSION_PERCENT: z.coerce.number().positive().max(100).optional().default(30),
+    PARTNER_SELF_ENROLLMENT_DISCOUNT_PERCENT: z.coerce.number().positive().max(100).optional().default(20),
+    PARTNER_SELF_ENROLLMENT_MINIMUM_SPEND_CENTS: z.coerce.number().int().nonnegative().max(100_000_000).optional().default(0),
+    PARTNER_SELF_ENROLLMENT_SINGLE_USE_PER_ACCOUNT: z.enum(["true", "false"]).optional().default("false").transform((value) => value === "true"),
+    PARTNER_TERMS_VERSION: z.string().trim().min(1).max(80).optional().default("2026-07-23"),
 
     GOOGLE_MAPS_API_KEY: z.string().optional(),
     GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),

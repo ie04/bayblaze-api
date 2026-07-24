@@ -1102,6 +1102,10 @@ CORS failures.
   `referral_partners/{uid}`. Statuses are `pending`, `active`, `suspended`, and
   `rejected`; only active partners may use partner self-service data or receive
   new attribution.
+- Customer accounts self-enroll through `POST /v1/partners/me/enrollment`, which
+  records accepted partner terms and creates a `pending` partner profile without
+  a referral code. BayBlaze manually creates the referral-promo coupon through
+  the admin flow; that code assignment activates the dashboard and attribution.
 - Referral promo codes remain `customer_discount_codes/{CODE}` records with
   category `referral_partner`. `referral_partner_codes/{CODE}` is the unique,
   case-normalized code-to-partner index. Codes are stable after approval.

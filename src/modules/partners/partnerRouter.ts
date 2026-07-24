@@ -13,6 +13,7 @@ import {
   getPartnerOverview,
   getPartnerProfile,
   createActivePartnerWithPromo,
+  enrollPartnerAccount,
   listAdminPartners,
   listPartnerPayouts,
   listPartnerReferrals,
@@ -46,6 +47,10 @@ const referralQuerySchema = paginationSchema.extend({
 
 const partnerStatusSchema = z.object({
   status: z.enum(partnerStatuses),
+});
+
+const enrollmentSchema = z.object({
+  acceptedTerms: z.literal(true),
 });
 
 const approvalSchema = z.object({
@@ -87,6 +92,7 @@ type PartnerRouterDependencies = {
 
 type PartnerRouterServices = {
   createActivePartnerWithPromo: typeof createActivePartnerWithPromo;
+  enrollPartnerAccount: typeof enrollPartnerAccount;
   getPartnerAccount: typeof getPartnerAccount;
   getPartnerEarnings: typeof getPartnerEarnings;
   getPartnerOverview: typeof getPartnerOverview;
@@ -107,6 +113,7 @@ export function createPartnerRouter(dependencies: PartnerRouterDependencies = {}
   const serviceAuth = dependencies.serviceAuth ?? requirePartnerEventServiceToken;
   const services: PartnerRouterServices = {
     createActivePartnerWithPromo,
+    enrollPartnerAccount,
     getPartnerAccount,
     getPartnerEarnings,
     getPartnerOverview,
@@ -145,6 +152,15 @@ export function createPartnerRouter(dependencies: PartnerRouterDependencies = {}
   router.post("/partners/me/application", async (req: AccountAuthedRequest, res, next) => {
     try {
       res.status(201).json(await services.submitPartnerApplication(readUid(req)));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/partners/me/enrollment", async (req: AccountAuthedRequest, res, next) => {
+    try {
+      const parsed = enrollmentSchema.parse(req.body ?? {});
+      res.status(201).json(await services.enrollPartnerAccount(readUid(req), parsed));
     } catch (caught) {
       next(caught);
     }

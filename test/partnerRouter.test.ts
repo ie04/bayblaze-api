@@ -77,6 +77,54 @@ test("partner pagination and filters enforce safe input limits", async () => {
   }
 });
 
+test("partner enrollment derives UID and requires accepted terms", async () => {
+  let requestedUid = "";
+  let requestedInput: Record<string, unknown> = {};
+  const app = express();
+  app.use(express.json());
+  app.use("/v1", createPartnerRouter({
+    accountAuth: (req: AccountAuthedRequest, _res: Response, next: NextFunction) => {
+      req.accountAuth = {
+        badges: ["customer"], email: "a@example.com", exp: 2_000_000_000,
+        roles: [], settings: { ageVerificationDisabled: false }, uid: "account-a",
+      };
+      next();
+    },
+    services: {
+      enrollPartnerAccount: (async (uid: string, input: Record<string, unknown>) => {
+        requestedUid = uid;
+        requestedInput = input;
+        return { partner: { status: "pending", uid } };
+      }) as never,
+    },
+  }));
+  const server = app.listen(0);
+  await once(server, "listening");
+  const address = server.address();
+  assert(address && typeof address === "object");
+
+  try {
+    const missingTerms = await fetch(`http://127.0.0.1:${address.port}/v1/partners/me/enrollment`, {
+      body: JSON.stringify({}),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    assert.equal(missingTerms.status, 400);
+
+    const enrolled = await fetch(`http://127.0.0.1:${address.port}/v1/partners/me/enrollment`, {
+      body: JSON.stringify({ acceptedTerms: true }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+    assert.equal(enrolled.status, 201);
+    assert.equal(requestedUid, "account-a");
+    assert.deepEqual(requestedInput, { acceptedTerms: true });
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
 test("partner activity contracts expose privacy-safe customer labels only", () => {
   const record: PartnerCommissionRecord = {
     attributedAt: "2026-07-01T00:00:00.000Z", attributionId: "a1", attributionSource: "promo_query",
