@@ -72,6 +72,14 @@ events directly after Medusa accepts the delivery attempt. For pay-on-delivery
 orders, an `order_completed` partner event is treated as the paid completion
 moment unless the order payment status is failed/canceled/refunded.
 
+For customer-facing order totals in email, invoice, partner, and tracking
+surfaces, prefer BayBlaze checkout metadata totals such as
+`checkout_promo_total_after_discount` and
+`first_order_offer_total_after_discount` as dollar amounts. Medusa native money
+fields such as `total`, `subtotal`, and `discount_total` are cents/raw money
+values and should only be fallback sources after the checkout metadata is
+absent.
+
 Medusa source now lives inside this repository at `medusa/`. The previous
 standalone `bayblaze-medusa` repository is retired as an independent source of
 truth after the June 2026 consolidation. Make Medusa route/model/deployment

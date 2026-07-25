@@ -335,28 +335,28 @@ function toInvoicePrintJob(order: BayblazeOrder): InvoicePrintJob {
   const invoiceItems = normalizeInvoiceItems(order.items, metadata);
   const itemsSubtotal = invoiceItems.reduce((sum, item) => sum + item.total, 0);
   const subtotal =
-    readMoney(order.subtotal) ||
     readDollarMoney(metadata.checkout_promo_subtotal) ||
     readDollarMoney(metadata.first_order_offer_subtotal) ||
+    readMoney(order.subtotal) ||
     itemsSubtotal;
   const discountTotal =
-    readMoney(order.discount_total) ||
     readDollarMoney(
       metadata.checkout_promo_discount_amount,
       metadata.first_order_offer_discount_amount,
       metadata.bayblaze_referral_discount_amount,
       metadata.referral_discount_amount,
-    );
+    ) ||
+    readMoney(order.discount_total);
   const shippingTotal = readMoney(order.shipping_total);
   const taxTotal = readMoney(order.tax_total);
   const total =
-    readMoney(order.total) ||
     readDollarMoney(
       metadata.checkout_promo_total_after_discount,
       metadata.first_order_offer_total_after_discount,
       metadata.bayblaze_referral_total_after_discount,
       metadata.referral_total_after_discount,
     ) ||
+    readMoney(order.total) ||
     Math.max(0, subtotal - discountTotal + shippingTotal + taxTotal);
 
   return {

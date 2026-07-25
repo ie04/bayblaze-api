@@ -309,6 +309,13 @@ async function getAutomation(eventType: EmailAutomationEventType): Promise<Email
   };
 }
 
+export function buildEmailAutomationEventVariablesForTest(
+  eventType: EmailAutomationEventType,
+  payload: Record<string, unknown>,
+) {
+  return buildEventVariables(eventType, payload);
+}
+
 function buildEventVariables(eventType: EmailAutomationEventType, payload: Record<string, unknown>): Record<string, string> {
   if (eventType === "order_placed") {
     const metadata = readObject(payload.metadata);
@@ -322,9 +329,7 @@ function buildEventVariables(eventType: EmailAutomationEventType, payload: Recor
       .map(readString)
       .filter(Boolean)
       .join(" ") || customerEmail || "there";
-    const orderTotal = readMoney(payload.total) ||
-      readDollarMoney(metadata.checkout_promo_total_after_discount) ||
-      readDollarMoney(metadata.first_order_offer_total_after_discount);
+    const orderTotal = readOrderTotalDue(metadata, payload.total);
 
     return {
       customerEmail,
@@ -498,7 +503,16 @@ function readInteger(value: unknown) {
   return Number.isInteger(number) && number >= 0 ? number : 0;
 }
 
-function readMoney(...values: unknown[]) {
+function readOrderTotalDue(metadata: Record<string, unknown>, fallbackTotal: unknown) {
+  return readDollarMoney(
+    metadata.checkout_promo_total_after_discount,
+    metadata.first_order_offer_total_after_discount,
+    metadata.bayblaze_referral_total_after_discount,
+    metadata.referral_total_after_discount,
+  ) ?? readCentsMoney(fallbackTotal) ?? 0;
+}
+
+function readCentsMoney(...values: unknown[]) {
   for (const value of values) {
     const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
 
@@ -507,7 +521,7 @@ function readMoney(...values: unknown[]) {
     }
   }
 
-  return 0;
+  return null;
 }
 
 function readDollarMoney(...values: unknown[]) {
@@ -519,7 +533,7 @@ function readDollarMoney(...values: unknown[]) {
     }
   }
 
-  return 0;
+  return null;
 }
 
 function formatMoney(value: number) {
