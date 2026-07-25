@@ -110,6 +110,11 @@ partitioning, and Google Maps usage guardrails.
   Hub` stock location so checkout can associate the storefront sales channel
   with an eligible stock location. On June 14, 2026, production variants missing
   this level were backfilled from their `availableQuantity` metadata.
+- Treat variant metadata `availableQuantity` as BayBlaze's current sellable
+  quantity, not raw Medusa `stocked_quantity`. When syncing Medusa inventory
+  levels, write `stocked_quantity = availableQuantity + reserved_quantity` so
+  Medusa's computed available inventory remains aligned with the inventory app
+  even when carts/orders have existing reservations.
 - The Medusa inventory boundary is
   `/admin/bayblaze/inventory` and exports `AUTHENTICATE = false` so the route
   can validate `x-bayblaze-service-token` itself. The shared service-token

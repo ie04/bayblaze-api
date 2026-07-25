@@ -97,6 +97,8 @@ type InventoryLevel = {
   id: string;
   inventory_item_id?: string | null;
   location_id?: string | null;
+  reserved_quantity?: number | string | null;
+  stocked_quantity?: number | string | null;
 };
 
 type ProductCollection = {
@@ -864,10 +866,11 @@ async function syncVariantInventoryLevel(
   const stockLocationId = await getLocalDeliveryStockLocationId(query);
   const salesChannel = await getStorefrontSalesChannel(req);
   const existingLevel = await getInventoryLevel(query, inventoryItemId, stockLocationId);
+  const reservedQuantity = readQuantity(existingLevel?.reserved_quantity);
   const levelDraft = {
     inventory_item_id: inventoryItemId,
     location_id: stockLocationId,
-    stocked_quantity: quantity,
+    stocked_quantity: quantity + reservedQuantity,
   };
 
   if (salesChannel) {
@@ -949,7 +952,13 @@ async function getInventoryLevel(
 ) {
   const { data: inventoryLevels } = await query.graph<InventoryLevel>({
     entity: "inventory_level",
-    fields: ["id", "inventory_item_id", "location_id"],
+    fields: [
+      "id",
+      "inventory_item_id",
+      "location_id",
+      "reserved_quantity",
+      "stocked_quantity",
+    ],
     filters: {
       inventory_item_id: inventoryItemId,
       location_id: stockLocationId,
