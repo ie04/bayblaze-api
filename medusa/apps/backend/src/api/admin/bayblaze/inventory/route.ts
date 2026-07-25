@@ -10,6 +10,7 @@ import {
   createProductOptionsWorkflow,
   createProductsWorkflow,
   deleteProductsWorkflow,
+  linkSalesChannelsToStockLocationWorkflow,
   updateProductOptionsWorkflow,
   updateProductVariantsWorkflow,
   updateProductsWorkflow,
@@ -861,12 +862,17 @@ async function syncVariantInventoryLevel(
   const query = req.scope.resolve<Query>(ContainerRegistrationKeys.QUERY);
   const inventoryItemId = await getVariantInventoryItemId(query, variantId);
   const stockLocationId = await getLocalDeliveryStockLocationId(query);
+  const salesChannel = await getStorefrontSalesChannel(req);
   const existingLevel = await getInventoryLevel(query, inventoryItemId, stockLocationId);
   const levelDraft = {
     inventory_item_id: inventoryItemId,
     location_id: stockLocationId,
     stocked_quantity: quantity,
   };
+
+  if (salesChannel) {
+    await ensureStockLocationSalesChannelLink(req, stockLocationId, salesChannel.id);
+  }
 
   await batchInventoryItemLevelsWorkflow(req.scope).run({
     input: existingLevel
@@ -880,8 +886,29 @@ async function syncVariantInventoryLevel(
         }
       : {
           create: [levelDraft],
-        },
+      },
   });
+}
+
+async function ensureStockLocationSalesChannelLink(
+  req: MedusaRequest,
+  stockLocationId: string,
+  salesChannelId: string,
+) {
+  try {
+    await linkSalesChannelsToStockLocationWorkflow(req.scope).run({
+      input: {
+        id: stockLocationId,
+        add: [salesChannelId],
+      },
+    });
+  } catch (error) {
+    const message = getErrorMessage(error, "").toLowerCase();
+
+    if (!message.includes("already") && !message.includes("duplicate")) {
+      throw error;
+    }
+  }
 }
 
 async function getVariantInventoryItemId(query: Query, variantId: string) {
