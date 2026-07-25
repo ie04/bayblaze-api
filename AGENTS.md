@@ -321,6 +321,12 @@ DELETE /v1/admin/promo-codes/:code
 GET    /v1/admin/email-automations
 PATCH  /v1/admin/email-automations/:eventType
 POST   /v1/admin/email-automations/:eventType/test
+GET    /v1/admin/promotional-emails
+POST   /v1/admin/promotional-emails
+PATCH  /v1/admin/promotional-emails/:campaignId
+POST   /v1/admin/promotional-emails/:campaignId/test
+POST   /v1/admin/promotional-emails/:campaignId/send
+POST   /v1/admin/promotional-emails/send-due
 GET    /v1/admin/orders
 GET    /v1/admin/orders/:orderId
 DELETE /v1/admin/orders/:orderId
@@ -464,6 +470,15 @@ PATCH /v1/admin/coverage-areas/:coverageAreaId
 DELETE /v1/admin/coverage-areas/:coverageAreaId
 POST  /v1/admin/coverage-areas/:coverageAreaId/regenerate
 POST  /v1/admin/coverage-areas/regenerate-due
+GET   /v1/admin/email-automations
+PATCH /v1/admin/email-automations/:eventType
+POST  /v1/admin/email-automations/:eventType/test
+GET   /v1/admin/promotional-emails
+POST  /v1/admin/promotional-emails
+PATCH /v1/admin/promotional-emails/:campaignId
+POST  /v1/admin/promotional-emails/:campaignId/test
+POST  /v1/admin/promotional-emails/:campaignId/send
+POST  /v1/admin/promotional-emails/send-due
 GET   /v1/admin/orders
 GET   /v1/admin/orders/:orderId
 DELETE /v1/admin/orders/:orderId
@@ -500,6 +515,17 @@ coverage CRUD and regeneration use `/v1/admin/coverage-areas`. The
 `/v1/admin/coverage-areas/regenerate-due` route processes zones whose schedule
 metadata is due and should be called by an external scheduler if automatic
 production regeneration is needed.
+
+Promotional email campaigns are API-owned records in
+`promotional_email_campaigns/{campaignId}`. Admin clients send structured
+campaign fields such as subject, headline, body, image URL, CTA, recipient
+mode, manual/internal recipients, and batch schedule; the API renders the
+BayBlaze HTML email and sends through Resend. `POST
+/v1/admin/promotional-emails/:campaignId/send` queues immediate or scheduled
+batches in the campaign `batches` subcollection. `POST
+/v1/admin/promotional-emails/send-due` processes queued batches whose
+`scheduledFor` is due and should be called by an external scheduler if fully
+automatic drip sending is needed.
 
 Additional account/admin environment variables:
 

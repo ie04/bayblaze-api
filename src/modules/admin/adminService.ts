@@ -31,12 +31,19 @@ import {
   type CoverageAreaInput,
 } from "../isochronos/coverageAreaService";
 import {
+  createPromotionalEmailCampaign,
   listEmailAutomations,
+  listPromotionalEmailCampaigns,
   sendEmailAutomationTest,
+  sendDuePromotionalEmailBatches,
   updateEmailAutomation,
+  updatePromotionalEmailCampaign,
+  sendPromotionalEmailTest,
+  startPromotionalEmailSend,
   type EmailAutomationEventType,
   type EmailAutomationTestInput,
   type EmailAutomationUpdateInput,
+  type PromotionalEmailInput,
 } from "../email/emailAutomationService";
 import { createActivePartnerWithPromo, deleteUnusedPartnerReferralPromo, removeUnpaidPartnerReferralForDeletedOrder } from "../partners/partnerService";
 import { geocodeAddress } from "../isochronos/googleMapsService";
@@ -441,6 +448,30 @@ export function updateAdminEmailAutomation(eventType: EmailAutomationEventType, 
 
 export function sendAdminEmailAutomationTest(eventType: EmailAutomationEventType, input: EmailAutomationTestInput) {
   return sendEmailAutomationTest(eventType, input);
+}
+
+export function listAdminPromotionalEmails() {
+  return listPromotionalEmailCampaigns();
+}
+
+export function createAdminPromotionalEmail(input: PromotionalEmailInput) {
+  return createPromotionalEmailCampaign(input);
+}
+
+export function updateAdminPromotionalEmail(campaignId: string, input: PromotionalEmailInput) {
+  return updatePromotionalEmailCampaign(campaignId, input);
+}
+
+export function sendAdminPromotionalEmailTest(campaignId: string, input: EmailAutomationTestInput) {
+  return sendPromotionalEmailTest(campaignId, input);
+}
+
+export function startAdminPromotionalEmailSend(campaignId: string, input: { scheduled?: boolean }) {
+  return startPromotionalEmailSend(campaignId, input);
+}
+
+export function sendDueAdminPromotionalEmails(input: { campaignId?: string; limit?: number }) {
+  return sendDuePromotionalEmailBatches(input);
 }
 
 export async function createAdminIsochronePlot(input: {

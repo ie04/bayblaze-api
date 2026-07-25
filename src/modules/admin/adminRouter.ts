@@ -6,6 +6,7 @@ import { accountBadges, accountRoles } from "../accounts/accountTypes";
 import { ApiRequestError } from "../drivers/driverWorkflowService";
 import {
   createAdminCoverageArea,
+  createAdminPromotionalEmail,
   createAdminIsochronePlot,
   createAdminPromoCode,
   deleteAdminCoverageArea,
@@ -14,17 +15,22 @@ import {
   getAdminDriverRoutes,
   listAdminCoverageAreas,
   listAdminEmailAutomations,
+  listAdminPromotionalEmails,
   listAdminPromoCodes,
   regenerateAdminCoverageArea,
   regenerateDueAdminCoverageAreas,
   searchAdminAccounts,
   sendAdminEmailAutomationTest,
+  sendAdminPromotionalEmailTest,
+  sendDueAdminPromotionalEmails,
+  startAdminPromotionalEmailSend,
   sendAdminOrderDetail,
   sendAdminOrderDelete,
   sendAdminOrders,
   updateAdminAccount,
   updateAdminCoverageArea,
   updateAdminEmailAutomation,
+  updateAdminPromotionalEmail,
   updateAdminPromoCode,
 } from "./adminService";
 
@@ -144,6 +150,43 @@ const emailAutomationUpdateSchema = z.object({
 
 const emailAutomationTestSchema = z.object({
   recipientEmail: z.string().min(1),
+});
+
+const promotionalEmailRecipientModeSchema = z.enum(["customers", "manual", "internal", "combined"]);
+const promotionalEmailScheduleSchema = z.object({
+  batchSize: z.number().int().positive().max(100).optional(),
+  enabled: z.boolean().optional(),
+  intervalMinutes: z.number().int().positive().max(60 * 24 * 14).optional(),
+  startAt: z.string().optional(),
+});
+const promotionalEmailSchema = z.object({
+  body: z.string().min(1).optional(),
+  ctaLabel: z.string().optional(),
+  ctaUrl: z.string().optional(),
+  fromEmail: z.string().optional(),
+  headline: z.string().min(1).optional(),
+  imageUrl: z.string().optional(),
+  internalRecipientEmails: z.array(z.string()).optional(),
+  manualRecipientEmails: z.array(z.string()).optional(),
+  name: z.string().min(1).optional(),
+  preheader: z.string().optional(),
+  recipientMode: promotionalEmailRecipientModeSchema.optional(),
+  replyTo: z.string().optional(),
+  schedule: promotionalEmailScheduleSchema.optional(),
+  subject: z.string().min(1).optional(),
+});
+const promotionalEmailCreateSchema = promotionalEmailSchema.extend({
+  body: z.string().min(1),
+  headline: z.string().min(1),
+  name: z.string().min(1),
+  subject: z.string().min(1),
+});
+const promotionalEmailSendSchema = z.object({
+  scheduled: z.boolean().optional(),
+});
+const promotionalEmailDueSchema = z.object({
+  campaignId: z.string().optional(),
+  limit: z.number().int().positive().max(50).optional(),
 });
 
 export function createAdminRouter() {
@@ -276,6 +319,59 @@ export function createAdminRouter() {
       const eventType = emailAutomationEventTypeSchema.parse(String(req.params.eventType || ""));
       const parsed = emailAutomationTestSchema.parse(req.body ?? {});
       res.json(await sendAdminEmailAutomationTest(eventType, parsed));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.get("/admin/promotional-emails", async (_req, res, next) => {
+    try {
+      res.json(await listAdminPromotionalEmails());
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/admin/promotional-emails", async (req, res, next) => {
+    try {
+      const parsed = promotionalEmailCreateSchema.parse(req.body ?? {});
+      res.status(201).json(await createAdminPromotionalEmail(parsed));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.patch("/admin/promotional-emails/:campaignId", async (req, res, next) => {
+    try {
+      const parsed = promotionalEmailSchema.parse(req.body ?? {});
+      res.json(await updateAdminPromotionalEmail(String(req.params.campaignId || ""), parsed));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/admin/promotional-emails/:campaignId/test", async (req, res, next) => {
+    try {
+      const parsed = emailAutomationTestSchema.parse(req.body ?? {});
+      res.json(await sendAdminPromotionalEmailTest(String(req.params.campaignId || ""), parsed));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/admin/promotional-emails/:campaignId/send", async (req, res, next) => {
+    try {
+      const parsed = promotionalEmailSendSchema.parse(req.body ?? {});
+      res.json(await startAdminPromotionalEmailSend(String(req.params.campaignId || ""), parsed));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/admin/promotional-emails/send-due", async (req, res, next) => {
+    try {
+      const parsed = promotionalEmailDueSchema.parse(req.body ?? {});
+      res.json(await sendDueAdminPromotionalEmails(parsed));
     } catch (caught) {
       next(caught);
     }
