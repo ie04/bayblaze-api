@@ -115,6 +115,12 @@ partitioning, and Google Maps usage guardrails.
   levels, write `stocked_quantity = availableQuantity + reserved_quantity` so
   Medusa's computed available inventory remains aligned with the inventory app
   even when carts/orders have existing reservations.
+- Placed BayBlaze orders must reserve stock in two layers: Medusa keeps its
+  native reservation/availability accounting, and the `order.placed` subscriber
+  decrements variant metadata `availableQuantity` so storefront and inventory
+  app counts no longer offer the same physical units to another shopper.
+  `order.canceled` and BayBlaze admin order delete/cancel flows must restore
+  those variant quantities and then resync the Medusa inventory level.
 - The Medusa inventory boundary is
   `/admin/bayblaze/inventory` and exports `AUTHENTICATE = false` so the route
   can validate `x-bayblaze-service-token` itself. The shared service-token

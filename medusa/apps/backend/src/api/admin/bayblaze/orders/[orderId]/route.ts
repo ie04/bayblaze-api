@@ -88,7 +88,7 @@ const orderFields = [
   "fulfillments.*",
 ];
 
-const localDeliveryStockLocationName = "BayBlaze Local Delivery";
+const localDeliveryStockLocationName = "Bayblaze Local Delivery Hub";
 
 export async function GET(req: MedusaRequest, res: MedusaResponse) {
   if (!assertBayblazeServiceToken(req, res)) {
@@ -173,8 +173,7 @@ export async function DELETE(req: MedusaRequest, res: MedusaResponse) {
     return res.status(400).json({ message: "Order ID is required." });
   }
 
-  const body = (req.body ?? {}) as Record<string, unknown>;
-  const releaseStock = body.releaseStock === true;
+  const releaseStock = true;
   const logger = req.scope.resolve("logger");
   const query = req.scope.resolve<Query>(ContainerRegistrationKeys.QUERY);
   const orderModuleService = req.scope.resolve(Modules.ORDER);
