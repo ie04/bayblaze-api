@@ -91,6 +91,14 @@ be used again, and removes any unpaid partner referral commission for that
 order from the partner dashboard ledger. Paid partner commissions must remain
 as reversal/clawback history instead of being silently deleted.
 
+Promo records may set `singleUsePerAccount`; when true, successful checkout use
+is recorded under `customer_discount_codes/{CODE}/account_usages/{uid}` and the
+same signed-in customer account cannot use that promo again. Promo records with
+an `ownerUid` cannot be used by that same account. BayBlaze Win referral friend
+codes default `singleUsePerAccount` to true, require a different signed-in
+account than the referrer when recorded through customer checkout, and write the
+same `order_usages`/`account_usages` ledger entries as other promos.
+
 BayBlaze Win freebie claims are selected in the storefront, not in `bayblaze-win`.
 After the Medusa order is created, storefront checkout calls the service-token
 route `POST /v1/win/freebies/claim` with the reward claim token, order ID,

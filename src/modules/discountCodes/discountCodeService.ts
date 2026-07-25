@@ -7,6 +7,9 @@ export const discountCodesCollection = "customer_discount_codes";
 export const adminPromoCodeCategory = "admin_promo";
 export const referralPartnerPromoCodeCategory = "referral_partner";
 export const winReferralCodeCategory = "win_referral";
+const winRewardsCollection = "customer_win_rewards";
+const winReferralCodeIndexCollection = "customer_win_referral_codes";
+const winOrderCompletionsCollection = "customer_win_order_completions";
 
 export type DiscountCodeCategory =
   | typeof adminPromoCodeCategory
@@ -492,6 +495,15 @@ export async function recordAdminDiscountCodeUse(input: {
       throw new ApiRequestError(409, "That promo code is not managed by this promo tool.");
     }
 
+    if (discountCode.ownerUid && discountCode.ownerUid === uid) {
+      throw new ApiRequestError(
+        409,
+        discountCode.category === referralPartnerPromoCodeCategory
+          ? "You cannot use your own referral partner promo code."
+          : "You cannot use your own promo code.",
+      );
+    }
+
     if (discountCode.status !== "active" || discountCode.usedCount >= discountCode.usageLimit) {
       throw new ApiRequestError(409, "That promo code has already been used.");
     }
@@ -612,6 +624,7 @@ export async function releaseDiscountCodeOrderUse(input: {
     const accountUsedCount = normalizeInteger(accountUsageSnapshot?.data()?.usedCount);
     const nextCodeUsedCount = Math.max(0, discountCode.usedCount - 1);
     const isReferralPartner = discountCode.category === referralPartnerPromoCodeCategory;
+    const isWinReferral = discountCode.category === winReferralCodeCategory;
     const now = FieldValue.serverTimestamp();
 
     transaction.delete(orderUsageRef);
@@ -639,6 +652,37 @@ export async function releaseDiscountCodeOrderUse(input: {
       updatedAt: now,
       usedCount: nextCodeUsedCount,
     }), { merge: true });
+
+    if (isWinReferral) {
+      const rewardId = readString(usage.rewardId) || discountCode.rewardId;
+
+      transaction.delete(firestore.collection(winOrderCompletionsCollection).doc(code));
+      transaction.set(
+        firestore.collection(winReferralCodeIndexCollection).doc(code),
+        {
+          status: nextCodeUsedCount >= discountCode.usageLimit ? "used" : "active",
+          updatedAt: now,
+          usedAt: FieldValue.delete(),
+          usedByOrderId: FieldValue.delete(),
+          usedCount: nextCodeUsedCount,
+        },
+        { merge: true },
+      );
+
+      if (rewardId) {
+        transaction.set(
+          firestore.collection(winRewardsCollection).doc(rewardId),
+          {
+            claimToken: FieldValue.delete(),
+            completedOrderId: FieldValue.delete(),
+            qualifiedAt: FieldValue.delete(),
+            status: "waiting_for_friend_order",
+            updatedAt: now,
+          },
+          { merge: true },
+        );
+      }
+    }
 
     return {
       code,
@@ -838,6 +882,7 @@ function serializeDiscountCodeOrderUsage(id: string, data: Record<string, unknow
     orderId: readString(data.orderId) || id,
     recordedAt: serializeTimestamp(data.recordedAt),
     referredSpendCents: normalizeInteger(data.referredSpendCents),
+    rewardId: readString(data.rewardId),
     subtotalCents: normalizeInteger(data.subtotalCents),
     uid: readString(data.uid),
   };

@@ -19,6 +19,7 @@ type CompleteWinReferralInput = {
   completedOrderId?: string;
   customerEmail?: string;
   customerId?: string;
+  customerUid?: string;
   isCustomerFirstOrder?: boolean;
   orderId?: string;
   referralCode: string;
@@ -29,6 +30,7 @@ export async function completeWinReferral(input: CompleteWinReferralInput) {
   const completedOrderId = readString(input.completedOrderId) || readString(input.orderId);
   const completedCustomerId = readString(input.customerId);
   const completedCustomerEmail = readString(input.customerEmail).toLowerCase();
+  const completedCustomerUid = readString(input.customerUid);
   const isCustomerFirstOrder = input.isCustomerFirstOrder === true;
 
   if (!referralCode) {
@@ -42,6 +44,9 @@ export async function completeWinReferral(input: CompleteWinReferralInput) {
   const firestore = getBayblazeFirestore();
   const indexRef = firestore.collection(referralCodeIndexCollection).doc(referralCode);
   const discountCodeRef = firestore.collection(discountCodesCollection).doc(referralCode);
+  const accountUsageRef = completedCustomerUid
+    ? discountCodeRef.collection("account_usages").doc(completedCustomerUid)
+    : null;
   const completionRef = firestore.collection(orderCompletionsCollection).doc(referralCode);
   const ignoredCompletionRef = firestore
     .collection(orderCompletionsCollection)
@@ -50,9 +55,16 @@ export async function completeWinReferral(input: CompleteWinReferralInput) {
     .doc(completedOrderId);
   const claimToken = randomBytes(24).toString("base64url");
   const result = await firestore.runTransaction(async (transaction) => {
-    const [indexSnapshot, discountCodeSnapshot, completionSnapshot, ignoredCompletionSnapshot] = await Promise.all([
+    const [
+      indexSnapshot,
+      discountCodeSnapshot,
+      accountUsageSnapshot,
+      completionSnapshot,
+      ignoredCompletionSnapshot,
+    ] = await Promise.all([
       transaction.get(indexRef),
       transaction.get(discountCodeRef),
+      accountUsageRef ? transaction.get(accountUsageRef) : Promise.resolve(null),
       transaction.get(completionRef),
       transaction.get(ignoredCompletionRef),
     ]);
@@ -69,6 +81,10 @@ export async function completeWinReferral(input: CompleteWinReferralInput) {
 
     if (!rewardId || !uid) {
       throw new ApiRequestError(409, "BayBlaze win referral record is incomplete.");
+    }
+
+    if (completedCustomerUid && completedCustomerUid === uid) {
+      throw new ApiRequestError(409, "Send this friend code to someone else to unlock your freebie.");
     }
 
     if (!isCustomerFirstOrder) {
@@ -132,6 +148,10 @@ export async function completeWinReferral(input: CompleteWinReferralInput) {
     const discountCode = discountCodeSnapshot.exists ? discountCodeSnapshot.data() ?? {} : {};
     const usedCount = Math.max(readInteger(discountCode.usedCount), readInteger(index.usedCount));
     const storedUsageLimit = readInteger(discountCode.usageLimit) || readInteger(index.usageLimit) || usageLimit;
+    const singleUsePerAccount = readBooleanWithDefault(
+      discountCode.singleUsePerAccount ?? index.singleUsePerAccount,
+      true,
+    );
 
     if (
       usedCount >= storedUsageLimit ||
@@ -139,6 +159,14 @@ export async function completeWinReferral(input: CompleteWinReferralInput) {
       readString(index.status) === "used"
     ) {
       throw new ApiRequestError(409, "This BayBlaze win referral code has already been used.");
+    }
+
+    if (
+      completedCustomerUid &&
+      singleUsePerAccount &&
+      readInteger(accountUsageSnapshot?.data()?.usedCount) > 0
+    ) {
+      throw new ApiRequestError(409, "That promo code has already been used by this account.");
     }
 
     const now = FieldValue.serverTimestamp();
@@ -155,6 +183,7 @@ export async function completeWinReferral(input: CompleteWinReferralInput) {
       ownerUid: uid,
       referralCode,
       rewardId,
+      singleUsePerAccount: true,
       uid,
       updatedAt: now,
     });
@@ -168,6 +197,7 @@ export async function completeWinReferral(input: CompleteWinReferralInput) {
       isCustomerFirstOrder: true,
       ownerUid: uid,
       rewardId,
+      singleUsePerAccount: true,
       status: "used",
       usedAt: now,
       usedByOrderId: completedOrderId,
@@ -179,6 +209,35 @@ export async function completeWinReferral(input: CompleteWinReferralInput) {
     transaction.create(completionRef, completionRecord);
     transaction.set(indexRef, usageRecord, { merge: true });
     transaction.set(discountCodeRef, usageRecord, { merge: true });
+    transaction.create(
+      discountCodeRef.collection("order_usages").doc(completedOrderId),
+      removeUndefinedValues({
+        ...completionRecord,
+        code: referralCode,
+        customerEmail: completedCustomerEmail || undefined,
+        customerId: completedCustomerId || undefined,
+        ownerUid: uid,
+        recordedAt: now,
+        uid: completedCustomerUid || undefined,
+        usedCount: 1,
+      }),
+    );
+    if (accountUsageRef && completedCustomerUid) {
+      transaction.set(
+        accountUsageRef,
+        removeUndefinedValues({
+          code: referralCode,
+          customerEmail: completedCustomerEmail || undefined,
+          customerId: completedCustomerId || undefined,
+          firstOrderId: accountUsageSnapshot?.exists ? undefined : completedOrderId,
+          lastOrderId: completedOrderId,
+          lastUsedAt: now,
+          uid: completedCustomerUid,
+          usedCount: FieldValue.increment(1),
+        }),
+        { merge: true },
+      );
+    }
     transaction.set(
       firestore.collection(winRewardsCollection).doc(rewardId),
       {
@@ -232,6 +291,14 @@ function readInteger(value: unknown) {
   const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
 
   return Number.isInteger(number) && number >= 0 ? number : 0;
+}
+
+function readBooleanWithDefault(value: unknown, fallback: boolean) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  return fallback;
 }
 
 function removeUndefinedValues<T extends Record<string, unknown>>(value: T) {

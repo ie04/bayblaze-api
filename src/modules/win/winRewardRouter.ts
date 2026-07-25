@@ -41,6 +41,7 @@ const completionSchema = z.object({
   completedOrderId: z.string().optional(),
   customerEmail: z.string().optional(),
   customerId: z.string().optional(),
+  customerUid: z.string().optional(),
   isCustomerFirstOrder: z.boolean().optional(),
   orderId: z.string().optional(),
   referralCode: z.string().min(1),

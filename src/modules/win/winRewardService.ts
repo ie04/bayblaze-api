@@ -84,6 +84,7 @@ export async function startCustomerWinReward(uid: string, context: WinContext) {
     ownerUid: uid,
     referralCode,
     rewardId: ref.id,
+    singleUsePerAccount: true,
     status: "active",
     uid,
     usageLimit,
@@ -204,10 +205,17 @@ export async function recordCustomerDiscountCodeUse(uid: string, input: RecordCu
   const discountCode = serializeDiscountCode(snapshot.id, snapshot.data() ?? {});
 
   if (discountCode.category === winReferralCodeCategory) {
+    if (discountCode.ownerUid && discountCode.ownerUid === uid) {
+      throw new ApiRequestError(409, "Send this friend code to someone else to unlock your freebie.");
+    }
+    if (discountCode.singleUsePerAccount && await hasCustomerUsedDiscountCode(uid, discountCode.code)) {
+      throw new ApiRequestError(409, "That promo code has already been used by this account.");
+    }
     return completeWinReferral({
       completedOrderId: orderId,
       customerEmail: input.customerEmail,
       customerId: input.customerId,
+      customerUid: uid,
       isCustomerFirstOrder: input.isCustomerFirstOrder,
       referralCode: code,
     });
@@ -332,6 +340,7 @@ async function ensureDiscountCodeRecord(reward: WinRewardRecord) {
       ownerUid: reward.uid,
       referralCode,
       rewardId: `${reward.uid}_${reward.campaign}`,
+      singleUsePerAccount: true,
       status: used ? "used" : "active",
       uid: reward.uid,
       usageLimit,
