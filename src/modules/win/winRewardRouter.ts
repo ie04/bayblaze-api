@@ -7,6 +7,7 @@ import { ApiRequestError } from "../drivers/driverWorkflowService";
 import { completeWinReferral } from "./winReferralCompletionService";
 import {
   claimCustomerWinFreebie,
+  claimCustomerWinFreebieByToken,
   getCustomerWinFreebies,
   getCustomerWinRewardStatus,
   previewCustomerDiscountCode,
@@ -25,6 +26,13 @@ const winContextSchema = z.object({
 const freebieClaimSchema = z.object({
   campaign: z.string().optional(),
   claimToken: z.string().optional(),
+  productId: z.string().min(1),
+  variantId: z.string().optional(),
+});
+
+const serviceFreebieClaimSchema = z.object({
+  claimToken: z.string().min(1),
+  orderId: z.string().min(1),
   productId: z.string().min(1),
   variantId: z.string().optional(),
 });
@@ -62,6 +70,15 @@ export function createWinRewardRouter() {
     try {
       const parsed = completionSchema.parse(req.body ?? {});
       res.json(await completeWinReferral(parsed));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/win/freebies/claim", requireApiServiceToken, async (req, res, next) => {
+    try {
+      const parsed = serviceFreebieClaimSchema.parse(req.body ?? {});
+      res.json(await claimCustomerWinFreebieByToken(parsed));
     } catch (caught) {
       next(caught);
     }

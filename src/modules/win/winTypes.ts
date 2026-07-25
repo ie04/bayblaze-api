@@ -7,6 +7,7 @@ export type WinRewardRecord = {
   campaign: string;
   claimToken?: string;
   claimedAt?: unknown;
+  claimedOrderId?: string;
   claimedProductId?: string;
   claimedVariantId?: string;
   completedOrderId?: string;

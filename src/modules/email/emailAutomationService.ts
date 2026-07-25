@@ -505,6 +505,7 @@ function readInteger(value: unknown) {
 
 function readOrderTotalDue(metadata: Record<string, unknown>, fallbackTotal: unknown) {
   return readDollarMoney(
+    metadata.bayblaze_checkout_total_after_adjustments,
     metadata.checkout_promo_total_after_discount,
     metadata.first_order_offer_total_after_discount,
     metadata.bayblaze_referral_total_after_discount,

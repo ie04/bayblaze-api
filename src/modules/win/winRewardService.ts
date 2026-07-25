@@ -36,6 +36,7 @@ const maxFreebieProducts = 48;
 
 type WinContext = { campaign?: string; nfcTagId?: string; source?: string };
 type ClaimFreebieInput = { campaign?: string; claimToken?: string; productId: string; variantId?: string };
+type ServiceClaimFreebieInput = { claimToken: string; orderId: string; productId: string; variantId?: string };
 type PreviewCustomerDiscountCodeInput = { code: string; items?: PreviewDiscountItem[]; subtotalCents?: number };
 type RecordCustomerDiscountCodeUseInput = {
   code: string;
@@ -122,6 +123,43 @@ export async function claimCustomerWinFreebie(uid: string, input: ClaimFreebieIn
   const claimToken = reward.claimToken || randomBytes(24).toString("base64url");
   await rewardRef.set({ claimToken, claimedAt: FieldValue.serverTimestamp(), claimedProductId: freebie.id, claimedVariantId: freebie.variantId, status: "claimed" satisfies WinRewardStatus, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   return { claimToken, productId: freebie.id, status: "claimed", variantId: freebie.variantId };
+}
+
+export async function claimCustomerWinFreebieByToken(input: ServiceClaimFreebieInput) {
+  const claimToken = normalizeClaimToken(input.claimToken);
+  if (!claimToken) throw new ApiRequestError(400, "A win freebie claim token is required.");
+
+  const snapshot = await getBayblazeFirestore()
+    .collection(winRewardsCollection)
+    .where("claimToken", "==", claimToken)
+    .limit(2)
+    .get();
+
+  if (snapshot.empty) throw new ApiRequestError(404, "This win freebie claim token was not found.");
+  if (snapshot.size > 1) throw new ApiRequestError(409, "This win freebie claim token matched multiple rewards.");
+
+  const rewardRef = snapshot.docs[0].ref;
+  const reward = await refreshRewardQualification(snapshot.docs[0].data() as WinRewardRecord);
+  if (!isRewardQualified(reward)) throw new ApiRequestError(409, "This win freebie is not ready to claim.");
+
+  const freebie = await findFreebieProduct(input.productId, input.variantId);
+  if (!freebie) throw new ApiRequestError(404, "That freebie is not currently eligible.");
+
+  const existingOrderId = readString((reward as WinRewardRecord & { claimedOrderId?: string }).claimedOrderId);
+  if (existingOrderId && existingOrderId !== input.orderId) {
+    throw new ApiRequestError(409, "This win freebie has already been claimed.");
+  }
+
+  await rewardRef.set({
+    claimedAt: FieldValue.serverTimestamp(),
+    claimedOrderId: input.orderId,
+    claimedProductId: freebie.id,
+    claimedVariantId: freebie.variantId,
+    status: "claimed" satisfies WinRewardStatus,
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  return { claimToken, orderId: input.orderId, productId: freebie.id, status: "claimed", variantId: freebie.variantId };
 }
 
 export async function previewCustomerDiscountCode(uid: string, input: PreviewCustomerDiscountCodeInput) {
@@ -307,7 +345,7 @@ async function ensureDiscountCodeRecord(reward: WinRewardRecord) {
 }
 
 function serializeReward(reward: WinRewardRecord) {
-  return { campaign: reward.campaign, claimToken: reward.claimToken ?? null, claimedProductId: reward.claimedProductId ?? null, claimedVariantId: reward.claimedVariantId ?? null, completedOrderId: reward.completedOrderId ?? null, discountCodeCategory: reward.discountCodeCategory ?? winReferralCodeCategory, discountCodeId: reward.discountCodeId ?? reward.referralCode, discountPercent: reward.discountPercent, minimumSpendCents: reward.minimumSpendCents, nfcTagId: reward.nfcTagId ?? null, qualifiedAt: serializeTimestamp(reward.qualifiedAt), referralCode: reward.referralCode, referralUrl: reward.referralUrl, source: reward.source, status: reward.status };
+  return { campaign: reward.campaign, claimToken: reward.claimToken ?? null, claimedOrderId: reward.claimedOrderId ?? null, claimedProductId: reward.claimedProductId ?? null, claimedVariantId: reward.claimedVariantId ?? null, completedOrderId: reward.completedOrderId ?? null, discountCodeCategory: reward.discountCodeCategory ?? winReferralCodeCategory, discountCodeId: reward.discountCodeId ?? reward.referralCode, discountPercent: reward.discountPercent, minimumSpendCents: reward.minimumSpendCents, nfcTagId: reward.nfcTagId ?? null, qualifiedAt: serializeTimestamp(reward.qualifiedAt), referralCode: reward.referralCode, referralUrl: reward.referralUrl, source: reward.source, status: reward.status };
 }
 
 async function findFreebieProduct(productId: string, variantId?: string) {
@@ -344,6 +382,7 @@ function formatPrice(cents?: number) { if (!Number.isFinite(cents ?? Number.NaN)
 function getRewardRef(uid: string, campaign: string) { return getBayblazeFirestore().collection(winRewardsCollection).doc(`${uid}_${campaign}`); }
 function normalizeWinContext(context: WinContext) { return { campaign: normalizeToken(context.campaign) || defaultCampaign, nfcTagId: normalizeToken(context.nfcTagId), source: normalizeToken(context.source) || defaultSource }; }
 function normalizeToken(value: unknown) { return readString(value).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 80); }
+function normalizeClaimToken(value: unknown) { return readString(value).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 160); }
 function normalizeReferralCode(value: unknown) { return normalizeDiscountCode(value); }
 function buildReferralUrl(referralCode: string) { const storefrontUrl = (env.BAYBLAZE_STOREFRONT_URL || "https://bayblaze.net").replace(/\/$/, ""); const params = new URLSearchParams({ promo: referralCode }); return `${storefrontUrl}/?${params.toString()}`; }
 function isRewardQualified(reward: WinRewardRecord) { return reward.status === "qualified" || reward.status === "claimed" || Boolean(reward.completedOrderId); }
