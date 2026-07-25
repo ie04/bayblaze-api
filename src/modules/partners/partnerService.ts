@@ -493,7 +493,7 @@ export async function recordPartnerOrderEvent(event: PartnerOrderEvent) {
     if (currentPartner?.status !== "active" && !existing) {
       return { ignored: true, reason: "partner_not_active" };
     }
-    const paymentCapturedAt = event.eventType === "payment_captured"
+    const paymentCapturedAt = event.eventType === "payment_captured" || isPaidDeliveryCompletion(event, existing)
       ? eventAt
       : parseDate(existing?.paymentCapturedAt);
     const orderCompletedAt = event.eventType === "order_completed"
@@ -945,6 +945,19 @@ function getOrderStatus(event: PartnerOrderEvent) {
   if (event.eventType === "payment_captured") return "processing";
   if (event.eventType === "payment_refunded") return event.order.refundedCents ? "refunded" : "processing";
   return event.order.status || event.order.fulfillmentStatus || "processing";
+}
+
+function isPaidDeliveryCompletion(
+  event: PartnerOrderEvent,
+  existing?: PartnerCommissionRecord | null,
+) {
+  if (event.eventType !== "order_completed" || existing?.paymentCapturedAt) {
+    return false;
+  }
+
+  const paymentStatus = readString(event.order.paymentStatus).toLowerCase();
+
+  return !["canceled", "cancelled", "failed", "refunded"].includes(paymentStatus);
 }
 
 function readDollarCents(value: unknown) {

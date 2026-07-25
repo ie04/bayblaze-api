@@ -4,11 +4,13 @@ import {
   forwardDeliveryAttempt,
   forwardDriverQueueRequest,
 } from "../../clients/medusaDriverClient";
+import { getAdminOrderDetail } from "../../clients/medusaAdminClient";
 import { requireApiServiceToken } from "../../http/middleware/apiServiceAuth";
 import { sendUpstreamJson } from "../../http/upstream";
 import { normalizeDriverQueuePayload } from "./driverQueueNormalizer";
 import { writeDriverLocationSnapshot } from "./driverWorkflowService";
 import { scoreDriverDeliveryQueue } from "../isochronos/driverQueueScoringService";
+import { recordPartnerOrderEvent } from "../partners/partnerService";
 
 export function createDriverBridgeRouter() {
   const router = Router();
@@ -85,6 +87,11 @@ export function createDriverBridgeRouter() {
   router.post("/delivery-attempts", requireApiServiceToken, async (req, res, next) => {
     try {
       const upstream = await forwardDeliveryAttempt(req.body);
+      const responseBody = await upstream.clone().json().catch(() => ({})) as Record<string, unknown>;
+
+      if (upstream.ok) {
+        await recordBridgeDeliveryPartnerOrderEvent(req.body, responseBody);
+      }
 
       await sendUpstreamJson(res, upstream, {
         fallbackMessage: "Medusa delivery attempt API returned a non-JSON response.",
@@ -112,6 +119,53 @@ function readString(value: unknown) {
   }
 
   return typeof value === "string" ? value.trim() : "";
+}
+
+async function recordBridgeDeliveryPartnerOrderEvent(
+  body: unknown,
+  responseBody: Record<string, unknown>,
+) {
+  const record = body && typeof body === "object" && !Array.isArray(body)
+    ? body as Record<string, unknown>
+    : {};
+  const type = readString(record.type);
+
+  if (type !== "completed" && type !== "cancelled") {
+    return;
+  }
+
+  const orderId = readString(responseBody.orderId) || readString(record.orderId);
+
+  if (!orderId) {
+    return;
+  }
+
+  const order = await getAdminOrderDetail(orderId);
+  const metadata = asRecord(order.metadata);
+  const eventType = type === "completed" ? "order_completed" : "order_canceled";
+  const eventAt = readString(metadata.bayblaze_delivery_event_at) || new Date().toISOString();
+
+  await recordPartnerOrderEvent({
+    eventAt,
+    eventId: `delivery_bridge:${eventType}:${readString(order.id) || orderId}:${eventAt}`,
+    eventType,
+    order: {
+      currencyCode: readString(order.currency_code),
+      customerUid: readString(metadata.bayblaze_account_uid),
+      email: readString(order.email),
+      fulfillmentStatus: readString(order.fulfillment_status),
+      id: readString(order.id) || orderId,
+      metadata,
+      paymentStatus: readString(order.payment_status),
+      status: type,
+    },
+  });
+}
+
+function asRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 function readNumber(value: unknown, fallback?: number) {

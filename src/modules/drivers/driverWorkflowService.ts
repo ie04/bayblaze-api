@@ -1,9 +1,11 @@
 import { FieldValue } from "firebase-admin/firestore";
 
 import { getBayblazeFirestore } from "../../clients/firebaseAdminClient";
+import { getAdminOrderDetail } from "../../clients/medusaAdminClient";
 import { forwardDeliveryAttempt, forwardDriverQueueRequest, forwardReprintLabelsRequest } from "../../clients/medusaDriverClient";
 import { lockQueueHead, normalizeDriverQueuePayload, removeUndefinedValues } from "./driverQueueNormalizer";
 import { scoreDriverDeliveryQueue } from "../isochronos/driverQueueScoringService";
+import { recordPartnerOrderEvent } from "../partners/partnerService";
 import { sendDriverAssignmentAlerts } from "./driverAssignmentAlertService";
 import type {
   DeliveryAttemptLog,
@@ -266,9 +268,33 @@ export async function logDeliveryAttempt(uid: string, input: Omit<DeliveryAttemp
     await readJsonResponse(medusaResponse, "Medusa delivery attempt");
 
     if (log.type === "completed" || log.type === "cancelled") {
+      await recordDeliveryPartnerOrderEvent(log.orderId, log.type);
       await rescoreExistingDriverQueue(uid);
     }
   }
+}
+
+async function recordDeliveryPartnerOrderEvent(orderId: string, type: "completed" | "cancelled") {
+  const order = await getAdminOrderDetail(orderId);
+  const metadata = asRecord(order.metadata);
+  const eventType = type === "completed" ? "order_completed" : "order_canceled";
+  const eventAt = readString(metadata.bayblaze_delivery_event_at) || new Date().toISOString();
+
+  await recordPartnerOrderEvent({
+    eventAt,
+    eventId: `delivery_attempt:${eventType}:${readString(order.id) || orderId}:${eventAt}`,
+    eventType,
+    order: {
+      currencyCode: readString(order.currency_code),
+      customerUid: readString(metadata.bayblaze_account_uid),
+      email: readString(order.email),
+      fulfillmentStatus: readString(order.fulfillment_status),
+      id: readString(order.id) || orderId,
+      metadata,
+      paymentStatus: readString(order.payment_status),
+      status: type,
+    },
+  });
 }
 
 export async function registerDriverNotificationToken(
@@ -422,4 +448,10 @@ async function readJsonResponse(response: globalThis.Response, upstreamName: str
 
 function readString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function asRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }

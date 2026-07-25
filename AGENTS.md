@@ -64,6 +64,13 @@ in cents from the completed order's product total after the referral discount;
 the order's immutable promo metadata is verified against embedded Medusa before
 the ledger is updated. Prior order ledger entries keep their original
 commission percentage if the promo is edited later.
+Partner referral dashboard records are fed by `/v1/partners/order-events`.
+Medusa still forwards order/payment events, but storefront checkout also sends
+an idempotent `order_placed` event for referral-partner promos, and driver
+delivery completion/cancellation paths send `order_completed`/`order_canceled`
+events directly after Medusa accepts the delivery attempt. For pay-on-delivery
+orders, an `order_completed` partner event is treated as the paid completion
+moment unless the order payment status is failed/canceled/refunded.
 
 Medusa source now lives inside this repository at `medusa/`. The previous
 standalone `bayblaze-medusa` repository is retired as an independent source of
