@@ -436,8 +436,11 @@ in Firestore `storefront_sessions/{sessionId}` with recent event breadcrumbs.
 Admin operators read those summaries through authenticated
 `GET /v1/admin/storefront-activity/sessions`. Admin storefront visitor trends
 come from authenticated `GET /v1/admin/storefront-activity/analytics`, which
-returns daily buckets for unique visitors, sessions, and page views from the
-stored activity events. Do not put Firebase writes or service tokens in the
+returns daily buckets for unique visitors, sessions, and page views from
+`storefront_sessions` summaries and each session's capped `recentEvents`
+breadcrumbs. Keep this analytics query off Firestore collection-group
+`events.orderBy("occurredAt", "desc")` unless the required collection-group
+index exists in production. Do not put Firebase writes or service tokens in the
 storefront/admin browser bundles for this workflow.
 
 Google OAuth must be centralized through `bayblaze-api`: the API signs OAuth

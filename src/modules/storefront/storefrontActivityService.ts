@@ -117,11 +117,10 @@ export async function getStorefrontVisitorAnalytics(days = 30) {
       uniqueVisitors: new Set<string>(),
     },
   ]));
-  const sinceDate = new Date(`${dates[0]}T00:00:00.000Z`);
+  const sinceIso = `${dates[0]}T00:00:00.000Z`;
   const snapshot = await getBayblazeFirestore()
-    .collectionGroup("events")
-    .where("occurredAt", ">=", sinceDate.toISOString())
-    .orderBy("occurredAt", "desc")
+    .collection(sessionsCollection)
+    .where("lastSeenAt", ">=", sinceIso)
     .limit(50_000)
     .get();
   const visitors = new Set<string>();
@@ -130,23 +129,33 @@ export async function getStorefrontVisitorAnalytics(days = 30) {
 
   snapshot.docs.forEach((doc) => {
     const data = doc.data();
-    const date = getDateKey(data.occurredAt);
-    const bucket = buckets.get(date);
+    const visitorId = normalizeText(data.visitorId) || doc.id;
+    const sessionId = doc.id;
+    const recentEvents = Array.isArray(data.recentEvents) ? data.recentEvents : [];
+    const sessionDate = getDateKey(data.lastSeenAt);
+    const sessionBucket = buckets.get(sessionDate);
 
-    if (!bucket) {
-      return;
+    if (sessionBucket) {
+      sessionBucket.sessions.add(sessionId);
+      sessionBucket.uniqueVisitors.add(visitorId);
+      sessions.add(sessionId);
+      visitors.add(visitorId);
     }
 
-    const visitorId = normalizeText(data.visitorId) || doc.id;
-    const sessionId = normalizeText(data.sessionId) || doc.ref.parent.parent?.id || doc.id;
-    const isPageView = normalizeText(data.eventType) === "page_view";
+    recentEvents.forEach((event) => {
+      const occurredAt = normalizeText(event.occurredAt);
+      if (!occurredAt || occurredAt < sinceIso || normalizeText(event.eventType) !== "page_view") {
+        return;
+      }
 
-    bucket.sessions.add(sessionId);
-    bucket.uniqueVisitors.add(visitorId);
-    bucket.pageViews += isPageView ? 1 : 0;
-    sessions.add(sessionId);
-    visitors.add(visitorId);
-    pageViews += isPageView ? 1 : 0;
+      const eventBucket = buckets.get(getDateKey(occurredAt));
+      if (!eventBucket) {
+        return;
+      }
+
+      eventBucket.pageViews += 1;
+      pageViews += 1;
+    });
   });
 
   const serializedBuckets = Array.from(buckets.values()).map((bucket) => ({
