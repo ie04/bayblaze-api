@@ -125,11 +125,11 @@ test("partner enrollment derives UID and requires accepted terms", async () => {
   }
 });
 
-test("partner activity contracts expose privacy-safe customer labels only", () => {
+test("partner activity contracts expose customer names without internal identifiers", () => {
   const record: PartnerCommissionRecord = {
     attributedAt: "2026-07-01T00:00:00.000Z", attributionId: "a1", attributionSource: "promo_query",
     clawbackCents: 0, clawbackSettledCents: 0, commissionCents: 300, commissionRateBps: 3000,
-    createdAt: "2026-07-01T00:00:00.000Z", currency: "usd", customerLabel: "Customer ··9F2A",
+    createdAt: "2026-07-01T00:00:00.000Z", currency: "usd", customerLabel: "Avery Johnson",
     customerRef: "private-hash", eligibilityAt: "2026-07-08T00:00:00.000Z", eligibleAt: "",
     orderId: "order_123", orderStatus: "processing", originalCommissionCents: 300,
     orderCompletedAt: "2026-07-01T01:00:00.000Z", originalQualifyingSubtotalCents: 1000,
@@ -138,7 +138,7 @@ test("partner activity contracts expose privacy-safe customer labels only", () =
     updatedAt: "2026-07-01T00:00:00.000Z",
   };
   const activity = serializePartnerReferralActivity(record);
-  assert.equal(activity.customerLabel, "Customer ··9F2A");
+  assert.equal(activity.customerLabel, "Avery Johnson");
   assert.equal("customerRef" in activity, false);
   assert.equal("partnerUid" in activity, false);
   assert.equal("referralCode" in activity, false);

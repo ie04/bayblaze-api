@@ -151,6 +151,7 @@ async function recordBridgeDeliveryPartnerOrderEvent(
     eventType,
     order: {
       currencyCode: readString(order.currency_code),
+      customerName: getCustomerName(order),
       customerUid: readString(metadata.bayblaze_account_uid),
       email: readString(order.email),
       fulfillmentStatus: readString(order.fulfillment_status),
@@ -166,6 +167,18 @@ function asRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function getCustomerName(order: Record<string, unknown>) {
+  const shippingAddress = asRecord(order.shipping_address);
+
+  return [
+    shippingAddress.first_name,
+    shippingAddress.last_name,
+  ]
+    .map(readString)
+    .filter(Boolean)
+    .join(" ");
 }
 
 function readNumber(value: unknown, fallback?: number) {

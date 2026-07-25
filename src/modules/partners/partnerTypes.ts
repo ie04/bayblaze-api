@@ -77,6 +77,7 @@ export type PartnerPayoutRecord = {
 
 export type TrustedPartnerOrder = {
   currencyCode?: string;
+  customerName?: string;
   customerUid?: string;
   email?: string;
   fulfillmentStatus?: string;

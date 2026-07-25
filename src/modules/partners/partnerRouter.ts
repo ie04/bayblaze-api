@@ -73,6 +73,7 @@ const orderEventSchema = z.object({
   eventType: z.enum(partnerOrderEventTypes),
   order: z.object({
     currencyCode: z.string().max(12).optional(),
+    customerName: z.string().max(160).optional(),
     customerUid: z.string().max(180).optional(),
     email: z.string().max(320).optional(),
     fulfillmentStatus: z.string().max(80).optional(),

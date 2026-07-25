@@ -454,7 +454,8 @@ export async function recordPartnerOrderEvent(event: PartnerOrderEvent) {
     return { ignored: true, reason: "invalid_qualifying_basis" };
   }
   const customerRef = createCustomerRef(event.order.customerUid || event.order.email || event.order.id);
-  const customerLabel = `Customer ··${customerRef.slice(-4).toUpperCase()}`;
+  const fallbackCustomerLabel = `Customer ··${customerRef.slice(-4).toUpperCase()}`;
+  const customerName = normalizeCustomerName(event.order.customerName);
   const rateBps = percentToBasisPoints(promo.commissionPercent);
   const baseCalculation = calculatePartnerCommission({
     commissionRateBps: rateBps,
@@ -533,7 +534,7 @@ export async function recordPartnerOrderEvent(event: PartnerOrderEvent) {
       commissionRateBps: existing?.commissionRateBps || rateBps,
       createdAt: existing?.createdAt || now,
       currency: (event.order.currencyCode || existing?.currency || "usd").toLowerCase(),
-      customerLabel: existing?.customerLabel || customerLabel,
+      customerLabel: getReferralCustomerLabel(existing?.customerLabel, customerName, fallbackCustomerLabel),
       customerRef: existing?.customerRef || customerRef,
       eligibilityAt: Timestamp.fromDate(eligibilityAt),
       eligibleAt: lifecycle.status === "eligible" ? existing?.eligibleAt || now : existing?.eligibleAt || null,
@@ -945,6 +946,30 @@ function getOrderStatus(event: PartnerOrderEvent) {
   if (event.eventType === "payment_captured") return "processing";
   if (event.eventType === "payment_refunded") return event.order.refundedCents ? "refunded" : "processing";
   return event.order.status || event.order.fulfillmentStatus || "processing";
+}
+
+function getReferralCustomerLabel(
+  existingLabel: string | undefined,
+  customerName: string,
+  fallbackLabel: string,
+) {
+  if (customerName) {
+    return customerName;
+  }
+
+  return existingLabel || fallbackLabel;
+}
+
+function normalizeCustomerName(value: unknown) {
+  const name = readString(value)
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!name || name.length > 160) {
+    return name.slice(0, 160);
+  }
+
+  return name;
 }
 
 function isPaidDeliveryCompletion(

@@ -27,6 +27,10 @@ type Order = {
     }> | null;
   }> | null;
   payment_status?: string | null;
+  shipping_address?: {
+    first_name?: string | null;
+    last_name?: string | null;
+  } | null;
   status?: string | null;
 };
 
@@ -40,6 +44,8 @@ const orderFields = [
   "metadata",
   "payment_collections.refunded_amount",
   "payment_collections.payments.refunds.amount",
+  "shipping_address.first_name",
+  "shipping_address.last_name",
 ];
 
 export default async function bayblazePartnerOrderEventHandler({
@@ -75,6 +81,7 @@ export default async function bayblazePartnerOrderEventHandler({
       eventType,
       order: {
         currencyCode: readString(order.currency_code),
+        customerName: getCustomerName(order),
         customerUid: readString(order.metadata?.bayblaze_account_uid),
         email: readString(order.email),
         fulfillmentStatus: readString(order.fulfillment_status),
@@ -163,6 +170,16 @@ async function notifyPartnerApi(payload: Record<string, unknown>) {
 function readMoney(value: unknown) {
   const number = typeof value === "number" || typeof value === "string" ? Number(value) : Number.NaN;
   return Number.isFinite(number) && number > 0 ? number : 0;
+}
+
+function getCustomerName(order: Order) {
+  return [
+    order.shipping_address?.first_name,
+    order.shipping_address?.last_name,
+  ]
+    .map(readString)
+    .filter(Boolean)
+    .join(" ");
 }
 
 function readString(value: unknown) {

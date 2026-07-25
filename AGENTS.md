@@ -71,6 +71,9 @@ delivery completion/cancellation paths send `order_completed`/`order_canceled`
 events directly after Medusa accepts the delivery attempt. For pay-on-delivery
 orders, an `order_completed` partner event is treated as the paid completion
 moment unless the order payment status is failed/canceled/refunded.
+Partner referral activity should display the referred customer's name when the
+trusted order event includes it. Keep internal customer hashes, emails, partner
+UIDs, and referral codes out of the public partner activity response.
 
 For customer-facing order totals in email, invoice, partner, and tracking
 surfaces, prefer BayBlaze checkout metadata totals such as

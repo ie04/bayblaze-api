@@ -86,6 +86,7 @@ test("persistent partner authorization, attribution, commissions, refunds, and p
   };
   const order = {
     currencyCode: "usd",
+    customerName: "Avery Johnson",
     customerUid,
     email: `customer-${suffix}@example.com`,
     id: `order-${suffix}`,
@@ -102,6 +103,7 @@ test("persistent partner authorization, attribution, commissions, refunds, and p
 
   const referrals = await listPartnerReferrals(partnerUid, { limit: 10, query: "", status: "eligible" });
   assert.equal(referrals.total, 1);
+  assert.equal(referrals.items[0]?.customerLabel, "Avery Johnson");
   assert.equal(referrals.items[0]?.earnedCents, 2_400);
   assert.equal("email" in (referrals.items[0] ?? {}), false);
 
