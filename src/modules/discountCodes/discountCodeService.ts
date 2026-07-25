@@ -579,6 +579,75 @@ export async function recordAdminDiscountCodeUse(input: {
   });
 }
 
+export async function releaseDiscountCodeOrderUse(input: {
+  code?: string;
+  orderId: string;
+}) {
+  const code = normalizeDiscountCode(input.code);
+  const orderId = readString(input.orderId);
+
+  if (!code || !orderId) {
+    return { ignored: true, reason: "missing_code_or_order" };
+  }
+
+  const firestore = getBayblazeFirestore();
+  const codeRef = firestore.collection(discountCodesCollection).doc(code);
+  const orderUsageRef = codeRef.collection("order_usages").doc(orderId);
+
+  return firestore.runTransaction(async (transaction) => {
+    const [codeSnapshot, orderUsageSnapshot] = await Promise.all([
+      transaction.get(codeRef),
+      transaction.get(orderUsageRef),
+    ]);
+
+    if (!codeSnapshot.exists || !orderUsageSnapshot.exists) {
+      return { ignored: true, reason: "usage_not_found" };
+    }
+
+    const discountCode = serializeDiscountCode(codeSnapshot.id, codeSnapshot.data() ?? {});
+    const usage = serializeDiscountCodeOrderUsage(orderUsageSnapshot.id, orderUsageSnapshot.data() ?? {});
+    const uid = readString(usage.uid);
+    const accountUsageRef = uid ? codeRef.collection("account_usages").doc(uid) : null;
+    const accountUsageSnapshot = accountUsageRef ? await transaction.get(accountUsageRef) : null;
+    const accountUsedCount = normalizeInteger(accountUsageSnapshot?.data()?.usedCount);
+    const nextCodeUsedCount = Math.max(0, discountCode.usedCount - 1);
+    const isReferralPartner = discountCode.category === referralPartnerPromoCodeCategory;
+    const now = FieldValue.serverTimestamp();
+
+    transaction.delete(orderUsageRef);
+
+    if (accountUsageRef && accountUsageSnapshot?.exists) {
+      if (accountUsedCount <= 1) {
+        transaction.delete(accountUsageRef);
+      } else {
+        transaction.set(accountUsageRef, removeUndefinedValues({
+          totalCommissionCents: isReferralPartner ? FieldValue.increment(-usage.commissionCents) : undefined,
+          totalReferredSpendCents: isReferralPartner ? FieldValue.increment(-usage.referredSpendCents) : undefined,
+          updatedAt: now,
+          usedCount: FieldValue.increment(-1),
+        }), { merge: true });
+      }
+    }
+
+    transaction.set(codeRef, removeUndefinedValues({
+      status: nextCodeUsedCount >= discountCode.usageLimit ? "used" : "active",
+      totalCommissionCents: isReferralPartner ? FieldValue.increment(-usage.commissionCents) : undefined,
+      totalDiscountCents: isReferralPartner ? FieldValue.increment(-usage.discountCents) : undefined,
+      totalReferredSpendCents: isReferralPartner ? FieldValue.increment(-usage.referredSpendCents) : undefined,
+      totalReferredSubtotalCents: isReferralPartner ? FieldValue.increment(-usage.subtotalCents) : undefined,
+      uniqueReferredCustomers: isReferralPartner && accountUsedCount <= 1 ? FieldValue.increment(-1) : undefined,
+      updatedAt: now,
+      usedCount: nextCodeUsedCount,
+    }), { merge: true });
+
+    return {
+      code,
+      orderId,
+      released: true,
+    };
+  });
+}
+
 export function normalizeDiscountCode(value: unknown) {
   return readString(value)
     .replace(/[^a-zA-Z0-9_-]/g, "")

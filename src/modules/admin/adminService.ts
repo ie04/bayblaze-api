@@ -12,6 +12,7 @@ import {
   listDiscountCodes,
   normalizeDiscountCode,
   referralPartnerPromoCodeCategory,
+  releaseDiscountCodeOrderUse,
   serializeDiscountCode,
   updateDiscountCode,
   winReferralCodeCategory,
@@ -37,7 +38,7 @@ import {
   type EmailAutomationTestInput,
   type EmailAutomationUpdateInput,
 } from "../email/emailAutomationService";
-import { createActivePartnerWithPromo, deleteUnusedPartnerReferralPromo } from "../partners/partnerService";
+import { createActivePartnerWithPromo, deleteUnusedPartnerReferralPromo, removeUnpaidPartnerReferralForDeletedOrder } from "../partners/partnerService";
 import { geocodeAddress } from "../isochronos/googleMapsService";
 import type { Response as ExpressResponse } from "express";
 
@@ -475,9 +476,57 @@ export async function sendAdminOrderDelete(res: ExpressResponse, orderId: string
     throw new ApiRequestError(400, "Order ID is required.");
   }
 
+  const order = await readAdminOrderForCleanup(orderId);
   const upstream = await forwardAdminOrderDeleteRequest(orderId, input);
+  if (upstream.ok && order) {
+    await cleanupDeletedOrderReferences(order);
+  }
+
   return sendUpstreamJson(res, upstream, {
     fallbackMessage: "Medusa order delete API returned a non-JSON response.",
     upstreamName: "Medusa order delete",
   });
+}
+
+async function readAdminOrderForCleanup(orderId: string) {
+  const upstream = await forwardAdminOrderDetailRequest(orderId);
+  const text = await upstream.text();
+
+  if (!upstream.ok || !text) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(text) as { order?: unknown };
+    return asRecord(payload.order);
+  } catch {
+    return null;
+  }
+}
+
+async function cleanupDeletedOrderReferences(order: Record<string, unknown>) {
+  const metadata = asRecord(order.metadata);
+  const orderId = readString(order.id);
+  const promoCode = normalizeDiscountCode(metadata.checkout_promo_code);
+
+  await Promise.all([
+    releaseDiscountCodeOrderUse({
+      code: promoCode,
+      orderId,
+    }).catch((error) => {
+      console.error("[BayBlaze] Failed to release deleted order promo usage.", error);
+    }),
+    removeUnpaidPartnerReferralForDeletedOrder({
+      metadata,
+      orderId,
+    }).catch((error) => {
+      console.error("[BayBlaze] Failed to remove deleted order partner referral.", error);
+    }),
+  ]);
+}
+
+function asRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }

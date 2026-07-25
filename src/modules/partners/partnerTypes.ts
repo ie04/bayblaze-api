@@ -11,6 +11,7 @@ export const partnerOrderEventTypes = [
   "order_placed",
   "order_completed",
   "order_canceled",
+  "order_deleted",
   "payment_captured",
   "payment_failed",
   "payment_refunded",

@@ -429,6 +429,13 @@ export async function getPartnerAccount(uid: string) {
 }
 
 export async function recordPartnerOrderEvent(event: PartnerOrderEvent) {
+  if (event.eventType === "order_deleted") {
+    return removeUnpaidPartnerReferralForDeletedOrder({
+      metadata: event.order.metadata,
+      orderId: event.order.id,
+    });
+  }
+
   const eventAt = parseDate(event.eventAt) ?? new Date();
   const metadata = event.order.metadata ?? {};
   const code = normalizePartnerCode(metadata.checkout_promo_code);
@@ -613,6 +620,59 @@ export async function recordPartnerOrderEvent(event: PartnerOrderEvent) {
       }, { merge: true });
     }
     return { duplicate: false, orderId: event.order.id, status: lifecycle.status };
+  });
+}
+
+export async function removeUnpaidPartnerReferralForDeletedOrder(input: {
+  metadata?: Record<string, unknown>;
+  orderId: string;
+}) {
+  const metadata = input.metadata ?? {};
+  const orderId = readString(input.orderId);
+  const code = normalizePartnerCode(metadata.checkout_promo_code);
+
+  if (
+    !orderId ||
+    !code ||
+    readString(metadata.checkout_promo_category) !== referralPartnerPromoCodeCategory
+  ) {
+    return { ignored: true, reason: "not_partner_promo" };
+  }
+
+  const promo = await getReferralPromo(code, { includeInactive: true });
+  if (!promo?.ownerUid) return { ignored: true, reason: "partner_promo_missing" };
+
+  const commissionRef = partnerRef(promo.ownerUid).collection(referralsSubcollection).doc(orderId);
+  const db = getBayblazeFirestore();
+
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(commissionRef);
+
+    if (!snapshot.exists) {
+      return { ignored: true, reason: "commission_not_found" };
+    }
+
+    const commission = serializeCommission(snapshot.id, snapshot.data() ?? {});
+
+    if (
+      commission.status === "paid" ||
+      commission.payoutId ||
+      commission.paidCommissionCents > 0
+    ) {
+      transaction.set(commissionRef, {
+        orderStatus: "deleted",
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      return { ignored: true, reason: "commission_paid" };
+    }
+
+    transaction.delete(commissionRef);
+
+    return {
+      orderId,
+      removed: true,
+    };
   });
 }
 
@@ -941,6 +1001,7 @@ async function readPartnerClickCount(uid: string) {
 }
 
 function getOrderStatus(event: PartnerOrderEvent) {
+  if (event.eventType === "order_deleted") return "deleted";
   if (["chargeback", "order_canceled", "payment_failed"].includes(event.eventType)) return "cancelled";
   if (event.eventType === "order_completed") return "completed";
   if (event.eventType === "payment_captured") return "processing";

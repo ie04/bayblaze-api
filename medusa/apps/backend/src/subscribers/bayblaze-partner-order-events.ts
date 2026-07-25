@@ -132,7 +132,7 @@ function toPartnerEventType(eventName: string, order: Order) {
   if (eventName === "payment.failed") return "payment_failed";
   if (eventName === "payment.refunded") return "payment_refunded";
   if (eventName === "order.updated") {
-    if (order.metadata?.bayblaze_deleted === true) return "order_canceled";
+    if (order.metadata?.bayblaze_deleted === true) return "order_deleted";
     const deliveryStatus = readString(order.metadata?.bayblaze_delivery_status);
     if (deliveryStatus === "completed") return "order_completed";
     if (deliveryStatus === "cancelled" || deliveryStatus === "canceled") return "order_canceled";

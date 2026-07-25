@@ -84,6 +84,13 @@ fields such as `total`, `subtotal`, and `discount_total` are cents/raw money
 values and should only be fallback sources after the checkout metadata is
 absent.
 
+Admin order deletion is a full unwind for unpaid/usage-based customer-facing
+effects: after Medusa confirms the delete, `bayblaze-api` releases the
+checkout promo `order_usages` record and account usage so single-use promos can
+be used again, and removes any unpaid partner referral commission for that
+order from the partner dashboard ledger. Paid partner commissions must remain
+as reversal/clawback history instead of being silently deleted.
+
 BayBlaze Win freebie claims are selected in the storefront, not in `bayblaze-win`.
 After the Medusa order is created, storefront checkout calls the service-token
 route `POST /v1/win/freebies/claim` with the reward claim token, order ID,
