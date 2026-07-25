@@ -734,6 +734,7 @@ function renderPromotionalEmail(campaign: Pick<PromotionalEmailCampaign, "body" 
     ? `<a href="${escapeHtml(campaign.ctaUrl)}" style="display:inline-block;background:#c94d12;color:#ffffff;text-decoration:none;font-size:15px;font-weight:800;padding:13px 18px;border-radius:999px">${escapeHtml(campaign.ctaLabel)}</a>`
     : "";
   const html = [
+    "<style>@import url('https://fonts.googleapis.com/css2?family=Jost:wght@500;600;700;800&display=swap');</style>",
     "<div style=\"margin:0;padding:28px 18px;background:#f6f8f5;color:#000000;font-family:Jost,Avenir,Montserrat,Arial,sans-serif;line-height:1.6\">",
     `<span style="display:none;max-height:0;overflow:hidden">${escapeHtml(campaign.preheader)}</span>`,
     "<div style=\"max-width:580px;margin:0 auto;background:#ffffff;border:1px solid #d8ded2;border-radius:18px;overflow:hidden;box-shadow:0 18px 44px rgba(17,19,15,0.12)\">",
