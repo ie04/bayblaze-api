@@ -62,6 +62,10 @@ const claimCodeCreateSchema = z.object({
   note: z.string().max(500).optional(),
 });
 
+const claimCodeListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(100),
+});
+
 const approvalSchema = z.object({
   code: z.string().min(5).max(40).optional(),
   commissionPercent: z.number().positive().max(100),
@@ -267,7 +271,7 @@ export function createPartnerRouter(dependencies: PartnerRouterDependencies = {}
 
   router.get("/admin/partners/claim-codes", async (req, res, next) => {
     try {
-      const parsed = paginationSchema.pick({ limit: true }).parse(req.query ?? {});
+      const parsed = claimCodeListQuerySchema.parse(req.query ?? {});
       res.json(await services.listAdminPartnerClaimCodes({ limit: parsed.limit }));
     } catch (caught) {
       next(caught);

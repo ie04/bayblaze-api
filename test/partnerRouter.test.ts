@@ -192,9 +192,9 @@ test("admin claim code list is admin scoped and accepts a bounded limit", async 
   assert(address && typeof address === "object");
 
   try {
-    const response = await fetch(`http://127.0.0.1:${address.port}/v1/admin/partners/claim-codes?limit=12&createdByUid=someone-else`);
+    const response = await fetch(`http://127.0.0.1:${address.port}/v1/admin/partners/claim-codes?limit=100&createdByUid=someone-else`);
     assert.equal(response.status, 200);
-    assert.equal(requestedLimit, 12);
+    assert.equal(requestedLimit, 100);
     assert.deepEqual(await response.json(), {
       items: [{ claimUrl: "https://nfc.bayblaze.net/partners/claim?code=LOCAL-12345", code: "LOCAL-12345", status: "unclaimed" }],
       total: 1,
