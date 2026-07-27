@@ -9,10 +9,13 @@ import {
 import { ApiRequestError } from "../drivers/driverWorkflowService";
 import {
   getPartnerAccount,
+  getPartnerClaimCode,
   getPartnerEarnings,
   getPartnerOverview,
   getPartnerProfile,
   createActivePartnerWithPromo,
+  claimPartnerClaimCode,
+  createPartnerClaimCode,
   enrollPartnerAccount,
   listAdminPartners,
   listPartnerPayouts,
@@ -51,6 +54,11 @@ const partnerStatusSchema = z.object({
 
 const enrollmentSchema = z.object({
   acceptedTerms: z.literal(true),
+});
+
+const claimCodeCreateSchema = z.object({
+  code: z.string().min(5).max(40).optional(),
+  note: z.string().max(500).optional(),
 });
 
 const approvalSchema = z.object({
@@ -92,9 +100,12 @@ type PartnerRouterDependencies = {
 };
 
 type PartnerRouterServices = {
+  claimPartnerClaimCode: typeof claimPartnerClaimCode;
   createActivePartnerWithPromo: typeof createActivePartnerWithPromo;
+  createPartnerClaimCode: typeof createPartnerClaimCode;
   enrollPartnerAccount: typeof enrollPartnerAccount;
   getPartnerAccount: typeof getPartnerAccount;
+  getPartnerClaimCode: typeof getPartnerClaimCode;
   getPartnerEarnings: typeof getPartnerEarnings;
   getPartnerOverview: typeof getPartnerOverview;
   getPartnerProfile: typeof getPartnerProfile;
@@ -113,9 +124,12 @@ export function createPartnerRouter(dependencies: PartnerRouterDependencies = {}
   const accountAuth = dependencies.accountAuth ?? requireAccountAuth;
   const serviceAuth = dependencies.serviceAuth ?? requirePartnerEventServiceToken;
   const services: PartnerRouterServices = {
+    claimPartnerClaimCode,
     createActivePartnerWithPromo,
+    createPartnerClaimCode,
     enrollPartnerAccount,
     getPartnerAccount,
+    getPartnerClaimCode,
     getPartnerEarnings,
     getPartnerOverview,
     getPartnerProfile,
@@ -148,7 +162,23 @@ export function createPartnerRouter(dependencies: PartnerRouterDependencies = {}
     }
   });
 
+  router.get("/partners/claim-codes/:code", async (req, res, next) => {
+    try {
+      res.json(await services.getPartnerClaimCode(readParam(req.params.code)));
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
   router.use("/partners/me", accountAuth, requireCustomerBadge);
+
+  router.post("/partners/me/claim-codes/:code/claim", async (req: AccountAuthedRequest, res, next) => {
+    try {
+      res.status(201).json(await services.claimPartnerClaimCode(readUid(req), readParam(req.params.code)));
+    } catch (caught) {
+      next(caught);
+    }
+  });
 
   router.post("/partners/me/application", async (req: AccountAuthedRequest, res, next) => {
     try {
@@ -227,6 +257,18 @@ export function createPartnerRouter(dependencies: PartnerRouterDependencies = {}
   router.get("/admin/partners", async (_req, res, next) => {
     try {
       res.json(await services.listAdminPartners());
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.post("/admin/partners/claim-codes", async (req: AccountAuthedRequest, res, next) => {
+    try {
+      const parsed = claimCodeCreateSchema.parse(req.body ?? {});
+      res.status(201).json({ claimCode: await services.createPartnerClaimCode({
+        ...parsed,
+        createdByUid: readUid(req),
+      }) });
     } catch (caught) {
       next(caught);
     }

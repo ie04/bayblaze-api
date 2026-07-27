@@ -125,6 +125,45 @@ test("partner enrollment derives UID and requires accepted terms", async () => {
   }
 });
 
+test("partner claim route derives UID from the authenticated customer", async () => {
+  let requestedUid = "";
+  let requestedCode = "";
+  const app = express();
+  app.use(express.json());
+  app.use("/v1", createPartnerRouter({
+    accountAuth: (req: AccountAuthedRequest, _res: Response, next: NextFunction) => {
+      req.accountAuth = {
+        badges: ["customer"], email: "claim@example.com", exp: 2_000_000_000,
+        roles: [], settings: { ageVerificationDisabled: false }, uid: "claiming-account",
+      };
+      next();
+    },
+    services: {
+      claimPartnerClaimCode: (async (uid: string, code: string) => {
+        requestedUid = uid;
+        requestedCode = code;
+        return { claimCode: { code, status: "claimed" }, partner: { uid } };
+      }) as never,
+    },
+  }));
+  const server = app.listen(0);
+  await once(server, "listening");
+  const address = server.address();
+  assert(address && typeof address === "object");
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${address.port}/v1/partners/me/claim-codes/local-abc12/claim`, {
+      method: "POST",
+    });
+    assert.equal(response.status, 201);
+    assert.equal(requestedUid, "claiming-account");
+    assert.equal(requestedCode, "local-abc12");
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
 test("partner activity contracts expose customer names without internal identifiers", () => {
   const record: PartnerCommissionRecord = {
     attributedAt: "2026-07-01T00:00:00.000Z", attributionId: "a1", attributionSource: "promo_query",

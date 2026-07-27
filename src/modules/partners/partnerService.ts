@@ -41,6 +41,7 @@ export const partnersCollection = "referral_partners";
 export const partnerCodeIndexCollection = "referral_partner_codes";
 export const partnerAttributionsCollection = "partner_attributions";
 export const partnerVisitsCollection = "partner_referral_visits";
+export const partnerClaimCodesCollection = "partner_claim_codes";
 const referralsSubcollection = "referrals";
 const payoutsSubcollection = "payouts";
 
@@ -187,6 +188,113 @@ export async function createActivePartnerWithPromo(input: {
   });
 
   return serializeDiscountCode(code, codeRecord);
+}
+
+export async function createPartnerClaimCode(input: {
+  code?: string;
+  createdByUid: string;
+  note?: string;
+}) {
+  let code: string;
+  try {
+    code = input.code
+      ? validatePartnerCode(input.code)
+      : await generateUniquePartnerCode({
+          isTaken: async (candidate) => {
+            const db = getBayblazeFirestore();
+            const [promo, index, claim] = await Promise.all([
+              db.collection(discountCodesCollection).doc(candidate).get(),
+              db.collection(partnerCodeIndexCollection).doc(candidate).get(),
+              db.collection(partnerClaimCodesCollection).doc(candidate).get(),
+            ]);
+            return promo.exists || index.exists || claim.exists;
+          },
+          prefix: env.PARTNER_REFERRAL_CODE_PREFIX,
+          uid: `${input.createdByUid}:${Date.now()}:${randomBytes(8).toString("hex")}`,
+        });
+  } catch (caught) {
+    throw new ApiRequestError(400, caught instanceof Error ? caught.message : "Referral code is invalid.");
+  }
+
+  const db = getBayblazeFirestore();
+  const ref = db.collection(partnerClaimCodesCollection).doc(code);
+  const now = FieldValue.serverTimestamp();
+
+  await ref.create({
+    claimUrl: buildPartnerClaimUrl(code),
+    code,
+    createdAt: now,
+    createdByUid: input.createdByUid,
+    note: readString(input.note).slice(0, 500),
+    status: "unclaimed",
+    updatedAt: now,
+  });
+
+  return serializePartnerClaimCode(code, (await ref.get()).data() ?? {});
+}
+
+export async function getPartnerClaimCode(codeInput: string) {
+  const code = normalizePartnerCode(codeInput);
+  if (!code) throw new ApiRequestError(400, "Claim code is required.");
+  const snapshot = await getBayblazeFirestore().collection(partnerClaimCodesCollection).doc(code).get();
+  if (!snapshot.exists) throw new ApiRequestError(404, "That affiliate QR code was not found.");
+  return { claimCode: serializePartnerClaimCode(snapshot.id, snapshot.data() ?? {}) };
+}
+
+export async function claimPartnerClaimCode(uid: string, codeInput: string) {
+  const code = normalizePartnerCode(codeInput);
+  if (!code) throw new ApiRequestError(400, "Claim code is required.");
+
+  const db = getBayblazeFirestore();
+  const claimRef = db.collection(partnerClaimCodesCollection).doc(code);
+
+  await db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(claimRef);
+    if (!snapshot.exists) throw new ApiRequestError(404, "That affiliate QR code was not found.");
+    const claim = serializePartnerClaimCode(snapshot.id, snapshot.data() ?? {});
+    if (claim.status === "claimed" && claim.claimedByUid === uid) return;
+    if (claim.status !== "unclaimed") throw new ApiRequestError(409, "That affiliate QR code has already been claimed.");
+    transaction.set(claimRef, {
+      claimAttemptUid: uid,
+      claimingAt: FieldValue.serverTimestamp(),
+      status: "claiming",
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+  });
+
+  try {
+    await createActivePartnerWithPromo({
+      code,
+      commissionPercent: env.PARTNER_SELF_ENROLLMENT_COMMISSION_PERCENT,
+      discountPercent: env.PARTNER_SELF_ENROLLMENT_DISCOUNT_PERCENT,
+      minimumSpendCents: env.PARTNER_SELF_ENROLLMENT_MINIMUM_SPEND_CENTS,
+      ownerUid: uid,
+      singleUsePerAccount: env.PARTNER_SELF_ENROLLMENT_SINGLE_USE_PER_ACCOUNT,
+    });
+  } catch (caught) {
+    await claimRef.set({
+      claimAttemptUid: null,
+      claimError: caught instanceof Error ? caught.message : "Claim failed.",
+      claimingAt: null,
+      status: "unclaimed",
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true }).catch(() => undefined);
+    throw caught;
+  }
+
+  await claimRef.set({
+    claimedAt: FieldValue.serverTimestamp(),
+    claimedByUid: uid,
+    claimError: null,
+    referralUrl: buildNfcReferralLink(code),
+    status: "claimed",
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  return {
+    claimCode: serializePartnerClaimCode(code, (await claimRef.get()).data() ?? {}),
+    partner: await getPartner(uid),
+  };
 }
 
 export async function deleteUnusedPartnerReferralPromo(codeInput: string) {
@@ -909,6 +1017,24 @@ function serializePartner(uid: string, data: Record<string, unknown>): PartnerRe
   };
 }
 
+function serializePartnerClaimCode(code: string, data: Record<string, unknown>) {
+  const status = ["unclaimed", "claiming", "claimed", "disabled"].includes(readString(data.status))
+    ? readString(data.status)
+    : "unclaimed";
+  return {
+    claimUrl: readString(data.claimUrl) || buildPartnerClaimUrl(code),
+    claimedAt: serializeDate(data.claimedAt),
+    claimedByUid: readString(data.claimedByUid),
+    code: normalizePartnerCode(data.code) || code,
+    createdAt: serializeDate(data.createdAt),
+    createdByUid: readString(data.createdByUid),
+    note: readString(data.note),
+    referralUrl: readString(data.referralUrl) || (status === "claimed" ? buildNfcReferralLink(code) : ""),
+    status,
+    updatedAt: serializeDate(data.updatedAt),
+  };
+}
+
 function serializeCommission(id: string, data: Record<string, unknown>): PartnerCommissionRecord {
   const status = ["tracked", "pending", "eligible", "paid", "reversed"].includes(readString(data.status))
     ? readString(data.status) as CommissionStatus
@@ -1089,6 +1215,18 @@ function normalizeSourcePath(value: unknown) {
 function buildReferralLink(code: string) {
   const url = new URL(env.BAYBLAZE_STOREFRONT_URL || "https://bayblaze.net");
   url.searchParams.set("promo", code);
+  return url.toString();
+}
+
+function buildPartnerClaimUrl(code: string) {
+  const url = new URL("/partners/claim", env.NFC_STOREFRONT_URL || "https://nfc.bayblaze.net");
+  url.searchParams.set("code", code);
+  return url.toString();
+}
+
+function buildNfcReferralLink(code: string) {
+  const url = new URL(env.NFC_STOREFRONT_URL || "https://nfc.bayblaze.net");
+  url.searchParams.set("ref", code);
   return url.toString();
 }
 

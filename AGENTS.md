@@ -54,6 +54,16 @@ design-reference uploads are stored via Firebase Admin under
 using existing Google Maps/IsoChronos route helpers with
 `NFC_LOCAL_DELIVERY_ORIGIN_ADDRESS` kept server-only.
 
+Affiliate flyer QR codes for offline sales are claim links, not customer-order
+referral links at creation time. Admins create an unclaimed code through
+`POST /v1/admin/partners/claim-codes`, which stores
+`partner_claim_codes/{CODE}` and returns
+`https://nfc.bayblaze.net/partners/claim?code={CODE}`. The recipient scans the
+flyer, signs in or registers with the BayBlaze account system, and claims it via
+`POST /v1/partners/me/claim-codes/:code/claim`. Once claimed, the same printed
+QR should resolve in the NFC app to the affiliate referral URL
+`https://nfc.bayblaze.net/?ref={CODE}`.
+
 ## Source-of-record boundaries
 
 Do not turn `bayblaze-api` into a second commerce database.
