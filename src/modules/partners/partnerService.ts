@@ -241,6 +241,20 @@ export async function getPartnerClaimCode(codeInput: string) {
   return { claimCode: serializePartnerClaimCode(snapshot.id, snapshot.data() ?? {}) };
 }
 
+export async function listAdminPartnerClaimCodes(input: { limit?: number } = {}) {
+  const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
+  const snapshot = await getBayblazeFirestore()
+    .collection(partnerClaimCodesCollection)
+    .orderBy("createdAt", "desc")
+    .limit(limit)
+    .get();
+
+  return {
+    items: snapshot.docs.map((doc) => serializePartnerClaimCode(doc.id, doc.data() ?? {})),
+    total: snapshot.size,
+  };
+}
+
 export async function claimPartnerClaimCode(uid: string, codeInput: string) {
   const code = normalizePartnerCode(codeInput);
   if (!code) throw new ApiRequestError(400, "Claim code is required.");

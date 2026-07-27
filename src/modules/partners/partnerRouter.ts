@@ -17,6 +17,7 @@ import {
   claimPartnerClaimCode,
   createPartnerClaimCode,
   enrollPartnerAccount,
+  listAdminPartnerClaimCodes,
   listAdminPartners,
   listPartnerPayouts,
   listPartnerReferrals,
@@ -109,6 +110,7 @@ type PartnerRouterServices = {
   getPartnerEarnings: typeof getPartnerEarnings;
   getPartnerOverview: typeof getPartnerOverview;
   getPartnerProfile: typeof getPartnerProfile;
+  listAdminPartnerClaimCodes: typeof listAdminPartnerClaimCodes;
   listAdminPartners: typeof listAdminPartners;
   listPartnerPayouts: typeof listPartnerPayouts;
   listPartnerReferrals: typeof listPartnerReferrals;
@@ -133,6 +135,7 @@ export function createPartnerRouter(dependencies: PartnerRouterDependencies = {}
     getPartnerEarnings,
     getPartnerOverview,
     getPartnerProfile,
+    listAdminPartnerClaimCodes,
     listAdminPartners,
     listPartnerPayouts,
     listPartnerReferrals,
@@ -257,6 +260,15 @@ export function createPartnerRouter(dependencies: PartnerRouterDependencies = {}
   router.get("/admin/partners", async (_req, res, next) => {
     try {
       res.json(await services.listAdminPartners());
+    } catch (caught) {
+      next(caught);
+    }
+  });
+
+  router.get("/admin/partners/claim-codes", async (req, res, next) => {
+    try {
+      const parsed = paginationSchema.pick({ limit: true }).parse(req.query ?? {});
+      res.json(await services.listAdminPartnerClaimCodes({ limit: parsed.limit }));
     } catch (caught) {
       next(caught);
     }

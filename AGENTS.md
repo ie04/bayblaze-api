@@ -63,6 +63,10 @@ flyer, signs in or registers with the BayBlaze account system, and claims it via
 `POST /v1/partners/me/claim-codes/:code/claim`. Once claimed, the same printed
 QR should resolve in the NFC app to the affiliate referral URL
 `https://nfc.bayblaze.net/?ref={CODE}`.
+Admins can list created flyer claim QR codes through
+`GET /v1/admin/partners/claim-codes?limit=...`; the route is protected by the
+existing employee/admin account role check and returns serialized safe
+`partner_claim_codes` records newest first for the NFC dashboard.
 
 NFC Google OAuth uses the app-route callback
 `https://nfc.bayblaze.net/auth/google/callback`, matching the admin/driver

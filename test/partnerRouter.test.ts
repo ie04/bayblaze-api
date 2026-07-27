@@ -164,6 +164,50 @@ test("partner claim route derives UID from the authenticated customer", async ()
   }
 });
 
+test("admin claim code list is admin scoped and accepts a bounded limit", async () => {
+  let requestedLimit = 0;
+  const app = express();
+  app.use(express.json());
+  app.use("/v1", createPartnerRouter({
+    accountAuth: (req: AccountAuthedRequest, _res: Response, next: NextFunction) => {
+      req.accountAuth = {
+        badges: ["customer", "employee"], email: "admin@example.com", exp: 2_000_000_000,
+        roles: ["admin"], settings: { ageVerificationDisabled: false }, uid: "admin-account",
+      };
+      next();
+    },
+    services: {
+      listAdminPartnerClaimCodes: (async (input: { limit?: number }) => {
+        requestedLimit = input.limit ?? 0;
+        return {
+          items: [{ claimUrl: "https://nfc.bayblaze.net/partners/claim?code=LOCAL-12345", code: "LOCAL-12345", status: "unclaimed" }],
+          total: 1,
+        };
+      }) as never,
+    },
+  }));
+  const server = app.listen(0);
+  await once(server, "listening");
+  const address = server.address();
+  assert(address && typeof address === "object");
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${address.port}/v1/admin/partners/claim-codes?limit=12&createdByUid=someone-else`);
+    assert.equal(response.status, 200);
+    assert.equal(requestedLimit, 12);
+    assert.deepEqual(await response.json(), {
+      items: [{ claimUrl: "https://nfc.bayblaze.net/partners/claim?code=LOCAL-12345", code: "LOCAL-12345", status: "unclaimed" }],
+      total: 1,
+    });
+
+    const tooLarge = await fetch(`http://127.0.0.1:${address.port}/v1/admin/partners/claim-codes?limit=101`);
+    assert.equal(tooLarge.status, 400);
+  } finally {
+    server.close();
+    await once(server, "close");
+  }
+});
+
 test("partner activity contracts expose customer names without internal identifiers", () => {
   const record: PartnerCommissionRecord = {
     attributedAt: "2026-07-01T00:00:00.000Z", attributionId: "a1", attributionSource: "promo_query",
