@@ -45,6 +45,15 @@ const googleAuthorizationUrl = "https://accounts.google.com/o/oauth2/v2/auth";
 const googleTokenUrl = "https://oauth2.googleapis.com/token";
 const googleTokenInfoUrl = "https://oauth2.googleapis.com/tokeninfo";
 const stateTtlSeconds = 10 * 60;
+const defaultAllowedCallbackUrls = [
+  "https://bayblaze.net/api/auth/oauth/google/callback",
+  "https://admin.bayblaze.net/auth/google/callback",
+  "https://driver.bayblaze.net/auth/google/callback",
+  "https://inventory.bayblaze.net/auth/google/callback",
+  "https://stock.bayblaze.net/auth/google/callback",
+  "https://win.bayblaze.net/auth/google/callback",
+  "https://nfc.bayblaze.net/auth/google/callback",
+];
 
 export function createGoogleOAuthStart(input: {
   callbackUrl: string;
@@ -318,14 +327,11 @@ function parseUrl(value: unknown, message: string) {
 }
 
 function assertAllowedCallbackUrl(callbackUrl: string) {
-  if (!env.GOOGLE_OAUTH_REDIRECT_URL) {
-    return;
-  }
-
-  const allowedUrls = env.GOOGLE_OAUTH_REDIRECT_URL
+  const configuredUrls = (env.GOOGLE_OAUTH_REDIRECT_URL || "")
     .split(",")
     .map((value) => value.trim())
-    .filter(Boolean)
+    .filter(Boolean);
+  const allowedUrls = [...defaultAllowedCallbackUrls, ...configuredUrls]
     .map((value) => new URL(value).toString());
 
   if (!allowedUrls.includes(callbackUrl)) {
