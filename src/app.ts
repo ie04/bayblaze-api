@@ -13,6 +13,7 @@ import { createDriverWorkflowRouter } from "./modules/drivers/driverWorkflowRout
 import { createEmailAutomationRouter } from "./modules/email/emailAutomationRouter";
 import { createInventoryBridgeRouter } from "./modules/inventory/inventoryBridgeRouter";
 import { IsochronosRequestError } from "./modules/isochronos/googleMapsService";
+import { createNfcRouter } from "./modules/nfc/nfcRouter";
 import { createOrderBridgeRouter } from "./modules/orders/orderBridgeRouter";
 import { createPartnerRouter } from "./modules/partners/partnerRouter";
 import { createStorefrontActivityRouter } from "./modules/storefront/storefrontActivityRouter";
@@ -26,7 +27,9 @@ const bayblazeAppOriginPatterns = [
   /^https:\/\/stock\.bayblaze\.net$/i,
   /^https:\/\/inventory\.bayblaze\.net$/i,
   /^https:\/\/win\.bayblaze\.net$/i,
-  /^https:\/\/bayblaze-(?:admin|storefront|driver|inventory|win)(?:-[a-z0-9-]+)?\.vercel\.app$/i,
+  /^https:\/\/nfc\.bayblaze\.net$/i,
+  /^https:\/\/bayblaze-(?:admin|storefront|driver|inventory|win|nfc)(?:-[a-z0-9-]+)?\.vercel\.app$/i,
+  /^https:\/\/nfc-storefront(?:-[a-z0-9-]+)?\.vercel\.app$/i,
 ];
 
 export function createApp() {
@@ -42,6 +45,8 @@ export function createApp() {
       origin: isAllowedCorsOrigin,
     }),
   );
+
+  app.use("/v1/nfc/stripe/webhook", express.raw({ type: "application/json", limit: "2mb" }));
 
   app.use(
     express.json({
@@ -72,6 +77,7 @@ export function createApp() {
   app.use("/v1", createInventoryBridgeRouter());
   app.use("/v1", createCheckoutBridgeRouter());
   app.use("/v1", createOrderBridgeRouter());
+  app.use("/v1", createNfcRouter());
   app.use("/v1", createPartnerRouter());
   app.use("/v1", createDriverBridgeRouter());
   app.use("/v1", createDriverWorkflowRouter());

@@ -38,6 +38,22 @@ The API exists to provide stable BayBlaze business workflows such as:
 * routing/ETA/coverage data
 * operational diagnostics
 
+NFC storefront backend responsibilities live in `src/modules/nfc`. The
+separate `nfc-storefront` Next.js app serves `nfc.bayblaze.net` and must call
+`bayblaze-api` for authoritative NFC pricing, affiliate attribution,
+local-delivery eligibility, private uploads, PaymentIntent creation, Stripe
+webhooks, commission ledger writes, and admin authorization. Browser code must
+not expose Stripe secrets, webhook secrets, Firebase credentials, Google Maps
+keys, storage credentials, or the private local-delivery origin.
+
+NFC pricing is server-authoritative: generic tags are 2000 cents, custom design
+is 4000 cents, generic custom colors add 500 cents, and the NFC affiliate
+commission is a fixed 1000 cents per qualifying paid order. Private
+design-reference uploads are stored via Firebase Admin under
+`nfc-order-assets/...`, and local delivery eligibility is capped at 30 minutes
+using existing Google Maps/IsoChronos route helpers with
+`NFC_LOCAL_DELIVERY_ORIGIN_ADDRESS` kept server-only.
+
 ## Source-of-record boundaries
 
 Do not turn `bayblaze-api` into a second commerce database.

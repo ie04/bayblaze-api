@@ -30,6 +30,13 @@ const envSchema = z
     MEDUSA_CUSTOMER_SESSION_PATH: z.string().optional().default("/admin/bayblaze/customer-sessions"),
 
     BAYBLAZE_STOREFRONT_URL: z.string().optional().default("https://bayblaze.net"),
+    NFC_STOREFRONT_URL: z.string().optional().default("https://nfc.bayblaze.net"),
+    NFC_STRIPE_SECRET_KEY: z.string().optional(),
+    NFC_STRIPE_WEBHOOK_SECRET: z.string().optional(),
+    NFC_USPS_STANDARD_FEE_CENTS: z.coerce.number().int().nonnegative().optional().default(599),
+    NFC_LOCAL_DELIVERY_FEE_CENTS: z.coerce.number().int().nonnegative().optional().default(0),
+    NFC_TAX_RATE_BPS: z.coerce.number().int().nonnegative().max(2_000).optional().default(0),
+    NFC_LOCAL_DELIVERY_ORIGIN_ADDRESS: z.string().optional(),
     PARTNER_ATTRIBUTION_WINDOW_DAYS: z.coerce.number().int().min(1).max(365).optional().default(30),
     PARTNER_COMMISSION_ELIGIBILITY_DAYS: z.coerce.number().int().min(0).max(365).optional().default(7),
     PARTNER_ATTRIBUTION_TOKEN_SECRET: z.string().optional(),
