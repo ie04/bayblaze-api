@@ -64,6 +64,12 @@ flyer, signs in or registers with the BayBlaze account system, and claims it via
 QR should resolve in the NFC app to the affiliate referral URL
 `https://nfc.bayblaze.net/?ref={CODE}`.
 
+NFC Google OAuth uses the app-route callback
+`https://nfc.bayblaze.net/auth/google/callback`, matching the admin/driver
+callback style rather than the main Next storefront's `/api/auth/...` callback.
+This URL must be present in both Google Cloud OAuth Authorized redirect URIs and
+`GOOGLE_OAUTH_REDIRECT_URL` in `bayblaze-api`.
+
 ## Source-of-record boundaries
 
 Do not turn `bayblaze-api` into a second commerce database.
