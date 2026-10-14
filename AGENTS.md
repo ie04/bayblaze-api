@@ -1303,3 +1303,32 @@ git add src/example.ts
 git commit -m "Clear commit message"
 git push
 ```
+
+## October 2026 OVHcloud Fresh Deployment
+
+- Hetzner VPS `178.156.179.156` is retired and inaccessible. Its PostgreSQL
+  database and local uploads cannot be recovered; this is a fresh commerce
+  deployment, not a restored database. Existing Firebase cloud data is separate
+  and must not be cleared or seeded over during provisioning.
+- New OVHcloud host: `40.160.239.20`, Ubuntu 26.04 LTS, x86_64, 8 GB RAM,
+  approximately 75 GB disk.
+- Bootstrap SSH: `ssh -i ~/.ssh/codex_vps_ed25519 ubuntu@40.160.239.20`.
+- Retain `/opt/bayblaze/bayblaze-api` and Compose project `bayblaze-api`.
+  Explicitly use `--env-file .env.production` for manual Compose commands.
+- New backend session and database secrets are generated on provisioning.
+  Missing Firebase/Google OAuth/Maps/push/payment credentials must be restored
+  before claiming those workflows are operational. Do not substitute credentials
+  from another Firebase project.
+- Deployment runner target: user `codex-deploy`, directory
+  `/home/codex-deploy/github-runners/bayblaze-api`, label `bayblaze-api`.
+  Runner `bayblaze-api-ovh` is registered and installed as a systemd service.
+- Firebase Admin credentials and Firebase web API key were restored from the
+  existing `bayblaze-isochronos` project; an accounts read is verified.
+- IsoChronos Maps Server Key now allows `40.160.239.20` instead of the retired
+  IP. Provider API restrictions remain unchanged.
+- Medusa migrations include baseline store/channel/key data. Production skips
+  the demo catalog/stock seed; migration-created demo products were removed on
+  initial OVHcloud provisioning. Local delivery region/hub/shipping is configured.
+- Public `/health` is explicitly routed to the API in Caddy.
+- Cloudflare DNS cutover and frontend commerce key/region configuration still
+  require verification; do not assume HTTPS is active from local health alone.

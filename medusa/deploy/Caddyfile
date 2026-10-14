@@ -1,7 +1,8 @@
 api.bayblaze.net {
 	encode zstd gzip
 
-	handle /v1/* {
+	@api path /v1/* /health
+	handle @api {
 		reverse_proxy bayblaze-api:3040
 	}
 

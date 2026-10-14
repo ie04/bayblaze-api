@@ -266,41 +266,19 @@ Local services:
 
 ## VPS Backend Deploys
 
-Production backend deploys should use a GitHub Actions self-hosted runner on the
-VPS instead of SSHing in from a hosted runner.
+The consolidated `bayblaze-api/.github/workflows/deploy.yml` builds both the API
+and embedded Medusa, runs database migrations, and recreates the single
+`bayblaze-api` Compose project from `/opt/bayblaze/bayblaze-api`.
 
-Runner details:
+The October 2026 replacement VPS is OVHcloud `40.160.239.20`; bootstrap SSH uses
+`ubuntu` and `~/.ssh/codex_vps_ed25519`. The old Hetzner host and its commerce
+data are unavailable. New commerce state starts with an empty PostgreSQL database;
+do not seed fictional products or quantities as production inventory.
 
-- Runner name: `bayblaze-vps`
-- Runner labels currently used by workflows: `self-hosted`, `Linux`, `X64`
-- Runner install directory: `/opt/github-runners/bayblaze-medusa`
-- App checkout/deploy directory: `/opt/bayblaze/medusa`
-- Runner user: `github-runner`
-
-The runner service should be installed from `/opt/github-runners/bayblaze-medusa`
-and run as `github-runner`. The `github-runner` user needs Docker access.
-
-Current caveat: after the Medusa repo consolidation, the active
-`bayblaze-api/.github/workflows/deploy.yml` deploys only the API container from
-`/opt/bayblaze/bayblaze-api`; it does not rebuild this embedded Medusa service.
-Until a Medusa deploy workflow is restored, deploy Medusa changes by syncing
-`bayblaze-api/medusa/` to `/opt/bayblaze/medusa` while preserving `.env` and
-`uploads`, then run the active compose file, `docker-compose.yml`:
-
-```bash
-cd /opt/bayblaze/medusa
-rsync source should exclude .env, .env.production, node_modules, apps/backend/.medusa, and uploads
-BAYBLAZE_DRIVER_SERVICE_TOKEN=... docker compose -f docker-compose.yml build medusa
-BAYBLAZE_DRIVER_SERVICE_TOKEN=... docker compose -f docker-compose.yml run --rm medusa npx medusa db:migrate
-BAYBLAZE_DRIVER_SERVICE_TOKEN=... docker compose -f docker-compose.yml up -d --remove-orphans
-docker image prune -f
-```
-
-Code changes should still be committed and pushed to `bayblaze-api`; the manual
-sync is only the current production activation step for embedded Medusa changes.
-
-Do not run `git pull` or `git reset` in `/opt/bayblaze/medusa`; it is currently
-a synced deployment tree rather than a git checkout.
+Runner target: user `codex-deploy`, install directory
+`/home/codex-deploy/github-runners/bayblaze-api`, label `bayblaze-api`.
+Preserve `.env.production`, `uploads`, and `medusa/uploads` during deployment.
+Do not deploy from the retired `/opt/bayblaze/medusa` tree.
 
 Customer Google OAuth is configured in the Medusa Auth Module and is initiated
 from the storefront `/login` page. Required backend environment variables:

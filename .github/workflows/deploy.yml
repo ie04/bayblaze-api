@@ -106,26 +106,26 @@ jobs:
       - name: Build Docker images
         working-directory: ${{ env.DEPLOY_DIR }}
         run: |
-          docker compose -p bayblaze-api -f docker-compose.prod.yml build
+          docker compose --env-file .env.production -p bayblaze-api -f docker-compose.prod.yml build
 
       - name: Run Medusa migrations
         working-directory: ${{ env.DEPLOY_DIR }}
         run: |
-          docker compose -p bayblaze-api -f docker-compose.prod.yml run --rm medusa npx medusa db:migrate
+          docker compose --env-file .env.production -p bayblaze-api -f docker-compose.prod.yml run --rm medusa npx medusa db:migrate
 
       - name: Run referral partner migration
         working-directory: ${{ env.DEPLOY_DIR }}
         run: |
-          docker compose -p bayblaze-api -f docker-compose.prod.yml run --rm bayblaze-api node dist/migrations/20260722ReferralPartners.js --apply
+          docker compose --env-file .env.production -p bayblaze-api -f docker-compose.prod.yml run --rm bayblaze-api node dist/migrations/20260722ReferralPartners.js --apply
 
       - name: Recreate BayBlaze API runtime
         working-directory: ${{ env.DEPLOY_DIR }}
         run: |
-          docker compose -p bayblaze-api -f docker-compose.prod.yml up -d --remove-orphans
+          docker compose --env-file .env.production -p bayblaze-api -f docker-compose.prod.yml up -d --remove-orphans
 
       - name: Show container status
         working-directory: ${{ env.DEPLOY_DIR }}
         run: |
-          docker compose -p bayblaze-api -f docker-compose.prod.yml ps
-          docker compose -p bayblaze-api -f docker-compose.prod.yml logs --tail=120 bayblaze-api
-          docker compose -p bayblaze-api -f docker-compose.prod.yml logs --tail=120 medusa
+          docker compose --env-file .env.production -p bayblaze-api -f docker-compose.prod.yml ps
+          docker compose --env-file .env.production -p bayblaze-api -f docker-compose.prod.yml logs --tail=120 bayblaze-api
+          docker compose --env-file .env.production -p bayblaze-api -f docker-compose.prod.yml logs --tail=120 medusa

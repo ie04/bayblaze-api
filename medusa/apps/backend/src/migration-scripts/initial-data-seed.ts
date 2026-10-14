@@ -294,6 +294,11 @@ export default async function initial_data_seed({
   });
   logger.info("Finished seeding stock location data.");
 
+  if (process.env.NODE_ENV === "production") {
+    logger.info("Skipping demo catalog and stock in production.");
+    return;
+  }
+
   logger.info("Seeding product data...");
 
   const { result: categoryResult } = await createProductCategoriesWorkflow(
