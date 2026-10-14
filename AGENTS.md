@@ -1330,5 +1330,12 @@ git push
   the demo catalog/stock seed; migration-created demo products were removed on
   initial OVHcloud provisioning. Local delivery region/hub/shipping is configured.
 - Public `/health` is explicitly routed to the API in Caddy.
-- Cloudflare DNS cutover and frontend commerce key/region configuration still
-  require verification; do not assume HTTPS is active from local health alone.
+- Cloudflare A record for `api.bayblaze.net` now targets `40.160.239.20`.
+  Public HTTPS `/health`, storefront settings, Medusa products/region, and
+  driver-origin CORS preflight pass.
+- Storefront Vercel production/preview commerce key and local-delivery region
+  were replaced for the new database. Catalog is intentionally empty.
+- Initial PostgreSQL/configuration backups are stored privately on the
+  workstation under `~/.codex/backups/bayblaze/`; automated independent backups
+  still need configuring. OAuth, VAPID push, and printer credentials remain
+  pending restoration.
