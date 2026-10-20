@@ -1337,5 +1337,24 @@ git push
   were replaced for the new database. Catalog is intentionally empty.
 - Initial PostgreSQL/configuration backups are stored privately on the
   workstation under `~/.codex/backups/bayblaze/`; automated independent backups
-  still need configuring. OAuth, VAPID push, and printer credentials remain
-  pending restoration.
+  still need configuring. VAPID push and printer credentials remain pending
+  restoration.
+
+## October 20, 2026 Google OAuth Restoration
+
+- Restored the BayBlaze Accounts Web OAuth client from the downloaded web-client
+  JSON for `bayblaze-isochronos`. Client credentials live only in production
+  `.env.production` (`GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET`),
+  not browser variables or committed files. Universal account OAuth is API-owned;
+  enabling Medusa's separate native Google provider is unnecessary.
+- Registered production callbacks in the credential JSON: storefront
+  `https://bayblaze.net/api/auth/oauth/google/callback` plus
+  `/auth/google/callback` at `admin`, `driver`, `stock`, `win`, and `nfc`
+  `.bayblaze.net`. The `inventory.bayblaze.net` alias is absent from the
+  downloaded Google redirect list; add it in Google Cloud before using Google
+  login on that alias. Existing API callback allowlists alone cannot authorize
+  Google-side redirect URIs.
+- All six API OAuth start requests return Google authorization URLs. The token
+  endpoint rejected a deliberately invalid code with `invalid_grant`, rather
+  than a client configuration error. Full interactive login still requires a
+  user to finish Google's sign-in screen.
