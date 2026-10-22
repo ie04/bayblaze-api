@@ -1376,3 +1376,25 @@ git push
   not an automatic per-deployment migration.
 - New upload, public image GET, temporary-image cleanup, and inventory snapshot
   checks pass against the public API. Reload inventory to refresh saved UI state.
+
+## October 2026 Shared Vehicle Registry
+
+- `src/modules/vehicles/vehicleService.ts` owns the vehicle registry on the
+  existing unified `bayblaze-isochronos` Firestore `vehicles` collection.
+  Preserve document IDs (including V01); never derive identity from mutable labels.
+- Admin routes: GET/POST `/v1/admin/vehicles`, PATCH
+  `/v1/admin/vehicles/:vehicleId`, protected by employee/admin account checks.
+  Vehicle IDs and driver-link fields cannot be changed by admin form input.
+- Inventory GET/POST `/v1/inventory` merges canonical registry vehicles into
+  commerce snapshots. Frontend Vercel proxies no longer read Firestore or need
+  Firebase Admin credentials. Vehicle assignment validates active registry IDs,
+  including active vehicles already linked to a driver; warehouse is synthetic.
+- Driver linking and clock-in validate vehicle/profile state transactionally.
+  Clock-out unlinks the driver and clears the selected vehicle while preserving
+  commerce stock. Admin deactivation refuses linked vehicles or vehicles with
+  inventory assignments. Cross-store inventory remains commerce-owned.
+- The canonical V01 record was backed up privately on the workstation at
+  `~/.codex/backups/bayblaze/vehicles-before-shared-registry-2026-10-22.json`.
+  V01's current linkage is preserved. Legacy `bayblaze-driver` project reads
+  return 403 for the available Google Cloud account; legacy records are left
+  untouched, not deleted or overwritten, pending access for reconciliation.

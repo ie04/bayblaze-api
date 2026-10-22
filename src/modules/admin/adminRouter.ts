@@ -1,3 +1,4 @@
+import { getVehicleRegistry, vehicleCreateSchema, vehicleUpdateSchema } from "../vehicles/vehicleService";
 import { Router, type NextFunction, type Response } from "express";
 import { z } from "zod";
 
@@ -193,6 +194,22 @@ export function createAdminRouter() {
   const router = Router();
 
   router.use("/admin", requireAccountAuth, requireAccountRole("admin"));
+
+  router.get("/admin/vehicles", async (_req, res, next) => {
+    try { res.json({ vehicles: await getVehicleRegistry().list() }); } catch (error) { next(error); }
+  });
+  router.post("/admin/vehicles", async (req: AccountAuthedRequest, res, next) => {
+    try {
+      const vehicle = await getVehicleRegistry().create(vehicleCreateSchema.parse(req.body), req.accountAuth!.uid);
+      res.status(201).json({ vehicle });
+    } catch (error) { next(error); }
+  });
+  router.patch("/admin/vehicles/:vehicleId", async (req: AccountAuthedRequest, res, next) => {
+    try {
+      const vehicle = await getVehicleRegistry().update(String(req.params.vehicleId), vehicleUpdateSchema.parse(req.body), req.accountAuth!.uid);
+      res.json({ vehicle });
+    } catch (error) { next(error); }
+  });
 
   router.get("/admin/accounts", async (req, res, next) => {
     try {

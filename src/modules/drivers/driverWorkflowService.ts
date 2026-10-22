@@ -1,4 +1,6 @@
-import { FieldValue } from "firebase-admin/firestore";
+import { ApiRequestError } from "../../http/apiRequestError";
+import { getVehicleRegistry } from "../vehicles/vehicleService";
+import { FieldValue, type Firestore } from "firebase-admin/firestore";
 
 import { getBayblazeFirestore } from "../../clients/firebaseAdminClient";
 import { getAdminOrderDetail } from "../../clients/medusaAdminClient";
@@ -52,22 +54,21 @@ export async function saveDriverProfile(uid: string, email: string, input: Parti
 }
 
 export async function listAvailableVehicles() {
-  const snapshot = await getBayblazeFirestore()
-    .collection("vehicles")
-    .where("active", "==", true)
-    .get();
-
-  return snapshot.docs
-    .map((vehicleDoc) => vehicleDoc.data() as VehicleRecord)
-    .filter((vehicle) => !vehicle.linkedDriverUid)
-    .sort((first, second) => first.label.localeCompare(second.label));
+  return (await getVehicleRegistry().list()).filter(vehicle => vehicle.active && !vehicle.linkedDriverUid);
 }
 
-export async function linkVehicleToDriver(uid: string, vehicleId: string) {
-  const db = getBayblazeFirestore();
-
+export async function linkVehicleToDriver(uid: string, vehicleId: string, db: Firestore = getBayblazeFirestore()) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(vehicleId) || vehicleId.toLowerCase() === "warehouse") {
+    throw new ApiRequestError(400, "Vehicle ID is invalid.");
+  }
   await db.runTransaction(async (transaction) => {
     const profileRef = db.collection("driver_profiles").doc(uid);
+    const profileSnapshot = await transaction.get(profileRef);
+    if (!profileSnapshot.exists) throw new ApiRequestError(404, "Driver profile was not found.");
+    const profile = profileSnapshot.data() as DriverProfile;
+    if (profile.activeVehicleId && profile.activeVehicleId !== vehicleId) {
+      throw new ApiRequestError(409, "Release your current vehicle before selecting another.");
+    }
     const vehicleRef = db.collection("vehicles").doc(vehicleId);
     const vehicleSnapshot = await transaction.get(vehicleRef);
 
@@ -76,7 +77,7 @@ export async function linkVehicleToDriver(uid: string, vehicleId: string) {
     }
 
     const vehicle = vehicleSnapshot.data() as VehicleRecord;
-    if (!vehicle.active || vehicle.linkedDriverUid) {
+    if (vehicle.active === false || (vehicle.linkedDriverUid && vehicle.linkedDriverUid !== uid)) {
       throw new ApiRequestError(409, "Vehicle is already linked.");
     }
 
@@ -93,23 +94,24 @@ export async function linkVehicleToDriver(uid: string, vehicleId: string) {
   });
 }
 
-export async function clockInDriver(uid: string) {
-  const profile = await requireProfile(uid);
-
-  if (!profile.activeVehicleId) {
-    throw new ApiRequestError(400, "Select a vehicle before clocking in.");
-  }
-
-  await getBayblazeFirestore().collection("driver_profiles").doc(uid).update({
-    clockedIn: true,
-    clockedInAt: FieldValue.serverTimestamp(),
-    clockedOutAt: FieldValue.delete(),
-    updatedAt: FieldValue.serverTimestamp(),
+export async function clockInDriver(uid: string, db: Firestore = getBayblazeFirestore()) {
+  await db.runTransaction(async transaction => {
+    const ref = db.collection("driver_profiles").doc(uid);
+    const doc = await transaction.get(ref);
+    if (!doc.exists) throw new ApiRequestError(404, "Driver profile was not found.");
+    const profile = doc.data() as DriverProfile;
+    if (!profile.onboardingComplete) throw new ApiRequestError(400, "Complete your profile before clocking in.");
+    if (!profile.activeVehicleId) throw new ApiRequestError(400, "Select a vehicle before clocking in.");
+    const vehicle = await transaction.get(db.collection("vehicles").doc(profile.activeVehicleId));
+    if (!vehicle.exists || vehicle.data()?.active === false || vehicle.data()?.linkedDriverUid !== uid) {
+      throw new ApiRequestError(409, "Select an available vehicle before clocking in.");
+    }
+    transaction.update(ref, { clockedIn: true, clockedInAt: FieldValue.serverTimestamp(),
+      clockedOutAt: FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() });
   });
 }
 
-export async function clockOutDriver(uid: string) {
-  const db = getBayblazeFirestore();
+export async function clockOutDriver(uid: string, db: Firestore = getBayblazeFirestore()) {
 
   await db.runTransaction(async (transaction) => {
     const profileRef = db.collection("driver_profiles").doc(uid);
@@ -340,14 +342,7 @@ export async function deleteDriverNotificationToken(uid: string, tokenId: string
     .delete();
 }
 
-export class ApiRequestError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+export { ApiRequestError } from "../../http/apiRequestError";
 
 async function requireProfile(uid: string) {
   const profile = await getDriverProfile(uid);

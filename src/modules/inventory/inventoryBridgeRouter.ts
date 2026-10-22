@@ -1,3 +1,6 @@
+import { ApiRequestError } from "../../http/apiRequestError";
+import { getVehicleRegistry } from "../vehicles/vehicleService";
+import { validateInventoryVehicleMutation } from "../vehicles/inventoryVehicleValidation";
 import Busboy from "busboy";
 import { Router, type Request, type Response as ExpressResponse } from "express";
 
@@ -29,6 +32,7 @@ export function createInventoryBridgeRouter() {
 
   router.post("/inventory", requireInventoryAppToken, async (req, res, next) => {
     try {
+      await validateInventoryVehicleMutation(req);
       const upstream = await forwardInventoryRequest(req);
       await sendUpstreamJson(res, upstream, "Medusa inventory API returned a non-JSON response.");
     } catch (caught) {
@@ -84,6 +88,10 @@ export function createInventoryBridgeRouter() {
     }
   });
 
+  router.use((error: unknown, _req: Request, res: ExpressResponse, next: import("express").NextFunction) => {
+    if (error instanceof ApiRequestError) return res.status(error.status).json({ message: error.message });
+    next(error);
+  });
   return router;
 }
 
@@ -106,6 +114,14 @@ async function sendUpstreamJson(res: ExpressResponse, upstream: globalThis.Respo
     };
   }
 
+  if (upstream.ok && "products" in responseBody) {
+    const vehicles = await getVehicleRegistry().list();
+    responseBody = { ...responseBody, vehicles: [
+      { id: "warehouse", label: "Warehouse", active: true },
+      ...vehicles.map(vehicle => ({ id: vehicle.vehicleId, label: vehicle.label,
+        plate: vehicle.plateNumber || undefined, active: vehicle.active })),
+    ] };
+  }
   return res.status(upstream.status).json(responseBody);
 }
 
