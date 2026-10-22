@@ -31,7 +31,7 @@ export function serializeVehicle(id: string, data: Record<string, unknown>) {
     vehicleId: id, label: text(data.label) || id,
     plateNumber: text(data.plateNumber) || text(data.plate),
     make: text(data.make), model: text(data.model), color: text(data.color),
-    active: data.active !== false,
+    active: data.active === true,
     ...(text(data.linkedDriverUid) ? { linkedDriverUid: text(data.linkedDriverUid) } : {}),
   };
 }

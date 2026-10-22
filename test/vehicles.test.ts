@@ -42,6 +42,7 @@ function fixture(initial: Record<string, Record<string, unknown>>) {
 test("vehicle IDs come from canonical document identity and legacy plate aliases normalize", () => {
   assert.deepEqual(serializeVehicle("V01", { vehicleId: "incorrect", plate: "ABC", linkedDriverUid: "driver", active: true }),
     { vehicleId: "V01", label: "V01", plateNumber: "ABC", make: "", model: "", color: "", active: true, linkedDriverUid: "driver" });
+  assert.equal(serializeVehicle("legacy", {}).active, false);
   assert.throws(() => vehicleCreateSchema.parse({ vehicleId: "warehouse", label: "Fake warehouse" }));
   assert.throws(() => vehicleUpdateSchema.parse({ linkedDriverUid: "hijack" }));
   assert.throws(() => vehicleUpdateSchema.parse({ vehicleId: "V02" }));
@@ -98,7 +99,7 @@ test("driver linking prevents double occupancy and multiple simultaneous vehicle
 });
 
 test("clock-in rejects an inactive vehicle or a vehicle owned by another driver", async () => {
-  for (const vehicle of [{ active: false, linkedDriverUid: "a" }, { active: true, linkedDriverUid: "b" }]) {
+  for (const vehicle of [{ active: false, linkedDriverUid: "a" }, { active: true, linkedDriverUid: "b" }, { linkedDriverUid: "a" }]) {
     const { db, rows } = fixture({ "vehicles/V01": vehicle, "driver_profiles/a": { activeVehicleId: "V01", onboardingComplete: true } });
     await assert.rejects(() => clockInDriver("a", db), /Select an available vehicle/);
     assert.notEqual(rows.get("driver_profiles/a")!.clockedIn, true);

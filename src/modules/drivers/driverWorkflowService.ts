@@ -77,7 +77,7 @@ export async function linkVehicleToDriver(uid: string, vehicleId: string, db: Fi
     }
 
     const vehicle = vehicleSnapshot.data() as VehicleRecord;
-    if (vehicle.active === false || (vehicle.linkedDriverUid && vehicle.linkedDriverUid !== uid)) {
+    if (!vehicle.active || (vehicle.linkedDriverUid && vehicle.linkedDriverUid !== uid)) {
       throw new ApiRequestError(409, "Vehicle is already linked.");
     }
 
@@ -103,7 +103,7 @@ export async function clockInDriver(uid: string, db: Firestore = getBayblazeFire
     if (!profile.onboardingComplete) throw new ApiRequestError(400, "Complete your profile before clocking in.");
     if (!profile.activeVehicleId) throw new ApiRequestError(400, "Select a vehicle before clocking in.");
     const vehicle = await transaction.get(db.collection("vehicles").doc(profile.activeVehicleId));
-    if (!vehicle.exists || vehicle.data()?.active === false || vehicle.data()?.linkedDriverUid !== uid) {
+    if (!vehicle.exists || vehicle.data()?.active !== true || vehicle.data()?.linkedDriverUid !== uid) {
       throw new ApiRequestError(409, "Select an available vehicle before clocking in.");
     }
     transaction.update(ref, { clockedIn: true, clockedInAt: FieldValue.serverTimestamp(),
