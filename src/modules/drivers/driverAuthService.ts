@@ -125,6 +125,7 @@ export async function createAllowedDriverAccount(email: string, code: string, pa
     ),
   ]);
 
+  await ensureAccountRecord(user.uid, normalizedEmail, { roles: ["driver"] });
   return createSessionResponse(user.uid, normalizedEmail);
 }
 
@@ -163,7 +164,10 @@ export function createSessionResponse(uid: string, email: string) {
 }
 
 async function createDriverSessionResponse(uid: string, email: string) {
-  const account = await ensureAccountRecord(uid, email, { roles: ["driver"] });
+  const account = await ensureAccountRecord(uid, email);
+  if (account.disabled || !account.roles.includes("driver")) {
+    throw new ApiRequestError(403, "Driver access is required.");
+  }
 
   return {
     account: {
@@ -177,7 +181,6 @@ async function createDriverSessionResponse(uid: string, email: string) {
     session: {
       email,
       token: createDriverSessionToken({
-        badges: account.badges,
         email: account.email,
         roles: account.roles,
         settings: account.settings,

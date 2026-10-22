@@ -45,7 +45,7 @@ export async function requireDriverAuth(
     const decoded = await getBayblazeAuth().verifyIdToken(token);
     const account = await getAccount(decoded.uid);
 
-    if (!account?.roles.includes("driver")) {
+    if (!account?.roles.includes("driver") || account.disabled) {
       return res.status(403).json({
         message: "Driver access is required.",
       });

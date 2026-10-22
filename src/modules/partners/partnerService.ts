@@ -1003,7 +1003,7 @@ async function resolveActivePartnerCode(code: string) {
 
 async function requireCustomerAccount(uid: string) {
   const account = await getAccount(uid);
-  if (!account || account.disabled || !account.badges.includes("customer")) {
+  if (!account || account.disabled) {
     throw new ApiRequestError(403, "An enabled BayBlaze customer account is required.");
   }
   return account;

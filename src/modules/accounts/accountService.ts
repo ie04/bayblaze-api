@@ -6,9 +6,7 @@ import { env } from "../../config/env";
 import { ApiRequestError } from "../drivers/driverWorkflowService";
 import { createAccountSessionToken } from "./accountSession";
 import {
-  accountBadges,
   accountRoles,
-  type AccountBadge,
   type AccountRecord,
   type AccountRole,
 } from "./accountTypes";
@@ -21,17 +19,7 @@ export async function loginAccount(email: string, password: string) {
 }
 
 export async function loginCustomerAccount(email: string, password: string) {
-  const response = await loginExistingAccount(parseEmail(email), password);
-
-  if (!response.account.badges.includes("customer")) {
-    const account = await ensureAccountRecord(response.account.uid, response.account.email, {
-      badges: ["customer"],
-    });
-
-    return createSessionResponse(account);
-  }
-
-  return response;
+  return loginExistingAccount(parseEmail(email), password);
 }
 
 export async function createCustomerAccount(input: {
@@ -59,7 +47,6 @@ export async function createCustomerAccount(input: {
     password,
   });
   const account = await ensureAccountRecord(user.uid, email, {
-    badges: ["customer"],
     displayName,
   });
   const medusaSession = await createMedusaCustomerSession({
@@ -135,7 +122,6 @@ export async function ensureAccountRecord(
   email: string,
   options: {
     roles?: AccountRole[];
-    badges?: AccountBadge[];
     displayName?: string;
     settings?: Partial<AccountRecord["settings"]>;
   } = {},
@@ -144,11 +130,6 @@ export async function ensureAccountRecord(
   const snapshot = await accountRef.get();
   const existing = snapshot.exists ? normalizeAccountRecord(uid, snapshot.data() ?? {}) : null;
   const roles = normalizeRoles([...(existing?.roles ?? []), ...(options.roles ?? [])]);
-  const badges = normalizeBadges([
-    ...(existing?.badges ?? []),
-    ...(options.badges ?? []),
-    ...(roles.length > 0 ? ["employee" as const] : []),
-  ]);
   const settings = {
     ageVerificationDisabled:
       options.settings?.ageVerificationDisabled ?? existing?.settings.ageVerificationDisabled ?? false,
@@ -159,14 +140,13 @@ export async function ensureAccountRecord(
     email: parseEmail(email),
     disabled: authUser?.disabled === true || existing?.disabled === true,
     displayName: options.displayName || authUser?.displayName || existing?.displayName || "",
-    badges,
     roles,
     settings,
     createdAt: existing?.createdAt ?? FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   };
 
-  await accountRef.set(record, { merge: true });
+  await accountRef.set({ ...record, badges: FieldValue.delete() }, { merge: true });
 
   return {
     ...record,
@@ -199,7 +179,6 @@ export async function searchAccounts(query: string, limit: number) {
       disabled: user.disabled || account?.disabled === true,
       displayName: account?.displayName || user.displayName || "",
       email: user.email || account?.email || "",
-      badges: account?.badges ?? [],
       lastLoginAt: account?.lastLoginAt ?? user.metadata.lastSignInTime,
       roles: account?.roles ?? [],
       settings: account?.settings ?? { ageVerificationDisabled: false },
@@ -214,7 +193,6 @@ export async function updateAccountAccess(
   input: {
     disabled?: boolean;
     displayName?: string;
-    badges?: AccountBadge[];
     roles?: AccountRole[];
     settings?: Partial<AccountRecord["settings"]>;
   },
@@ -222,12 +200,11 @@ export async function updateAccountAccess(
   const user = await getBayblazeAuth().getUser(uid);
   const existing = await getAccount(uid);
   const roles = input.roles ? normalizeRoles(input.roles) : existing?.roles ?? [];
-  const badges = input.badges ? normalizeBadges(input.badges) : existing?.badges ?? inferBadges(roles);
   const settings = {
     ageVerificationDisabled:
       input.settings?.ageVerificationDisabled ?? existing?.settings.ageVerificationDisabled ?? false,
   };
-  const disabled = input.disabled ?? user.disabled;
+  const disabled = input.disabled ?? (user.disabled || existing?.disabled === true);
 
   await getBayblazeAuth().updateUser(uid, {
     disabled,
@@ -240,7 +217,7 @@ export async function updateAccountAccess(
       email: parseEmail(user.email ?? existing?.email ?? ""),
       disabled,
       displayName: input.displayName ?? user.displayName ?? existing?.displayName ?? "",
-      badges,
+      badges: FieldValue.delete(),
       roles,
       settings,
       createdAt: existing?.createdAt ?? FieldValue.serverTimestamp(),
@@ -263,7 +240,6 @@ export function createSessionResponse(account: AccountRecord) {
     session: {
       email: account.email,
       token: createAccountSessionToken({
-        badges: account.badges,
         email: account.email,
         roles: account.roles,
         settings: account.settings,
@@ -279,7 +255,6 @@ export function sanitizeAccount(account: AccountRecord) {
     disabled: account.disabled,
     displayName: account.displayName ?? "",
     email: account.email,
-    badges: account.badges,
     roles: account.roles,
     settings: account.settings,
     uid: account.uid,
@@ -289,13 +264,6 @@ export function sanitizeAccount(account: AccountRecord) {
 export function normalizeRoles(values: unknown[]): AccountRole[] {
   const validRoles = new Set<AccountRole>(accountRoles);
   return [...new Set(values.filter((role): role is AccountRole => validRoles.has(role as AccountRole)))];
-}
-
-export function normalizeBadges(values: unknown[]): AccountBadge[] {
-  const validBadges = new Set<AccountBadge>(accountBadges);
-  const badges = [...new Set(values.filter((badge): badge is AccountBadge => validBadges.has(badge as AccountBadge)))];
-
-  return badges.length > 0 ? badges : ["customer"];
 }
 
 export function parseEmail(value: unknown) {
@@ -331,7 +299,6 @@ function normalizeAccountRecord(uid: string, data: FirebaseFirestore.DocumentDat
     disabled: data.disabled === true,
     displayName: typeof data.displayName === "string" ? data.displayName : "",
     email: typeof data.email === "string" ? data.email : "",
-    badges: normalizeBadges(Array.isArray(data.badges) ? data.badges : inferBadges(roles)),
     lastLoginAt: data.lastLoginAt ?? null,
     roles,
     settings: {
@@ -353,8 +320,4 @@ async function authAccountExists(email: string) {
 
     throw caught;
   }
-}
-
-function inferBadges(roles: AccountRole[]): AccountBadge[] {
-  return roles.length > 0 ? ["employee" as const] : ["customer" as const];
 }

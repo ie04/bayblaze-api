@@ -182,7 +182,6 @@ test("persistent partner authorization, attribution, commissions, refunds, and p
 
 async function seedCustomerAccount(uid: string, email: string, displayName: string) {
   await getBayblazeFirestore().collection("accounts").doc(uid).set({
-    badges: ["customer"],
     disabled: false,
     displayName,
     email,

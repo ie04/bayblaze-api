@@ -16,8 +16,7 @@ test("self-service routes derive the partner UID from the authenticated session"
   app.use(express.json());
   app.use("/v1", createPartnerRouter({
     accountAuth: (req: AccountAuthedRequest, _res: Response, next: NextFunction) => {
-      req.accountAuth = {
-        badges: ["customer"], email: "a@example.com", exp: 2_000_000_000,
+      req.accountAuth = { email: "a@example.com", exp: 2_000_000_000,
         roles: [], settings: { ageVerificationDisabled: false }, uid: "account-a",
       };
       next();
@@ -52,8 +51,7 @@ test("partner pagination and filters enforce safe input limits", async () => {
   app.use(express.json());
   app.use("/v1", createPartnerRouter({
     accountAuth: (req: AccountAuthedRequest, _res: Response, next: NextFunction) => {
-      req.accountAuth = {
-        badges: ["customer"], email: "a@example.com", exp: 2_000_000_000,
+      req.accountAuth = { email: "a@example.com", exp: 2_000_000_000,
         roles: [], settings: { ageVerificationDisabled: false }, uid: "account-a",
       };
       next();
@@ -84,8 +82,7 @@ test("partner enrollment derives UID and requires accepted terms", async () => {
   app.use(express.json());
   app.use("/v1", createPartnerRouter({
     accountAuth: (req: AccountAuthedRequest, _res: Response, next: NextFunction) => {
-      req.accountAuth = {
-        badges: ["customer"], email: "a@example.com", exp: 2_000_000_000,
+      req.accountAuth = { email: "a@example.com", exp: 2_000_000_000,
         roles: [], settings: { ageVerificationDisabled: false }, uid: "account-a",
       };
       next();
@@ -132,8 +129,7 @@ test("partner claim route derives UID from the authenticated customer", async ()
   app.use(express.json());
   app.use("/v1", createPartnerRouter({
     accountAuth: (req: AccountAuthedRequest, _res: Response, next: NextFunction) => {
-      req.accountAuth = {
-        badges: ["customer"], email: "claim@example.com", exp: 2_000_000_000,
+      req.accountAuth = { email: "claim@example.com", exp: 2_000_000_000,
         roles: [], settings: { ageVerificationDisabled: false }, uid: "claiming-account",
       };
       next();
@@ -170,8 +166,7 @@ test("admin claim code list is admin scoped and accepts a bounded limit", async 
   app.use(express.json());
   app.use("/v1", createPartnerRouter({
     accountAuth: (req: AccountAuthedRequest, _res: Response, next: NextFunction) => {
-      req.accountAuth = {
-        badges: ["customer", "employee"], email: "admin@example.com", exp: 2_000_000_000,
+      req.accountAuth = { email: "admin@example.com", exp: 2_000_000_000,
         roles: ["admin"], settings: { ageVerificationDisabled: false }, uid: "admin-account",
       };
       next();

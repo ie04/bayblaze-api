@@ -177,7 +177,7 @@ export function createPartnerRouter(dependencies: PartnerRouterDependencies = {}
     }
   });
 
-  router.use("/partners/me", accountAuth, requireCustomerBadge);
+  router.use("/partners/me", accountAuth, requireCustomerAccount);
 
   router.post("/partners/me/claim-codes/:code/claim", async (req: AccountAuthedRequest, res, next) => {
     try {
@@ -335,8 +335,8 @@ export function createPartnerRouter(dependencies: PartnerRouterDependencies = {}
   return router;
 }
 
-function requireCustomerBadge(req: AccountAuthedRequest, res: Response, next: NextFunction) {
-  if (!req.accountAuth?.badges.includes("customer")) {
+function requireCustomerAccount(req: AccountAuthedRequest, res: Response, next: NextFunction) {
+  if (!req.accountAuth?.uid) {
     return res.status(403).json({ message: "Customer account access is required." });
   }
   return next();

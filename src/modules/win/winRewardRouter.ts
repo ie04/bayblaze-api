@@ -95,7 +95,7 @@ export function createWinRewardRouter() {
     }
   });
 
-  router.use("/customer/win", requireAccountAuth, requireCustomerBadge);
+  router.use("/customer/win", requireAccountAuth, requireCustomerAccount);
 
   router.post("/customer/win/start", async (req: AccountAuthedRequest, res, next) => {
     try {
@@ -149,7 +149,7 @@ export function createWinRewardRouter() {
   router.post(
     "/customer/discount-codes/preview",
     requireAccountAuth,
-    requireCustomerBadge,
+    requireCustomerAccount,
     async (req: AccountAuthedRequest, res, next) => {
       try {
         const uid = readRequiredUid(req);
@@ -165,7 +165,7 @@ export function createWinRewardRouter() {
   router.post(
     "/customer/discount-codes/use",
     requireAccountAuth,
-    requireCustomerBadge,
+    requireCustomerAccount,
     async (req: AccountAuthedRequest, res, next) => {
       try {
         const uid = readRequiredUid(req);
@@ -198,8 +198,8 @@ export function createWinRewardRouter() {
   return router;
 }
 
-function requireCustomerBadge(req: AccountAuthedRequest, res: Response, next: NextFunction) {
-  if (!req.accountAuth?.badges.includes("customer")) {
+function requireCustomerAccount(req: AccountAuthedRequest, res: Response, next: NextFunction) {
+  if (!req.accountAuth?.uid) {
     return res.status(403).json({
       message: "Customer account access is required.",
     });

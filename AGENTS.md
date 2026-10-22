@@ -65,7 +65,7 @@ QR should resolve in the NFC app to the affiliate referral URL
 `https://nfc.bayblaze.net/?ref={CODE}`.
 Admins can list created flyer claim QR codes through
 `GET /v1/admin/partners/claim-codes?limit=...`; the route is protected by the
-existing employee/admin account role check and returns serialized safe
+existing admin account role check and returns serialized safe
 `partner_claim_codes` records newest first for the NFC dashboard.
 
 NFC Google OAuth uses the app-route callback
@@ -315,17 +315,16 @@ roles. Firebase Auth remains the password provider, but account authorization is
 represented by API-owned Firestore records in `accounts/{uid}`:
 
 ```text
-badges: customer | employee
 roles: admin | driver | inventory
 settings.ageVerificationDisabled: boolean
 disabled: boolean
 ```
 
-Every account should carry exactly the user-facing access badge intended for
-that identity: `customer` for storefront shoppers or `employee` for BayBlaze
-staff. Employee accounts can then receive any combination of `driver`,
-`inventory`, and `admin` roles. Role-protected API middleware requires both the
-`employee` badge and the requested role.
+Every enabled account has customer access implicitly. `roles` contains only
+explicit staff permissions (`admin`, `driver`, `inventory`), with `[]` for an
+ordinary customer. There is no `badges` field or employee prerequisite.
+Role-protected middleware checks the current account's required role after
+checking `disabled`; token claims never override live role revocation.
 
 Universal account routes:
 
@@ -419,10 +418,7 @@ POST /v1/customer/auth/login
 The storefront uses these routes for BayBlaze identity and keeps the Medusa
 customer token only for commerce reads such as saved customer details and order
 history.
-Storefront sign-in is self-service customer access: when a valid existing
-BayBlaze account signs into the storefront by email/password or Google OAuth,
-the API should ensure the `customer` badge automatically instead of requiring an
-admin to grant storefront access.
+Storefront sign-in is available to every enabled BayBlaze account.
 Storefront customer account creation should also create the Medusa commerce
 session through the API-owned embedded Medusa `/admin/bayblaze/customer-sessions`
 bridge and return `commerce.customerToken`; the storefront should not call
@@ -1383,7 +1379,7 @@ git push
   existing unified `bayblaze-isochronos` Firestore `vehicles` collection.
   Preserve document IDs (including V01); never derive identity from mutable labels.
 - Admin routes: GET/POST `/v1/admin/vehicles`, PATCH
-  `/v1/admin/vehicles/:vehicleId`, protected by employee/admin account checks.
+  `/v1/admin/vehicles/:vehicleId`, protected by admin account role checks.
   Vehicle IDs and driver-link fields cannot be changed by admin form input.
 - Inventory GET/POST `/v1/inventory` merges canonical registry vehicles into
   commerce snapshots. Frontend Vercel proxies no longer read Firestore or need
@@ -1398,3 +1394,21 @@ git push
   V01's current linkage is preserved. Legacy `bayblaze-driver` project reads
   return 403 for the available Google Cloud account; legacy records are left
   untouched, not deleted or overwritten, pending access for reconciliation.
+
+## October 2026 Role-Only Account Authorization
+
+- Every enabled universal account can use customer features. Staff privileges
+  are explicit `roles: ["admin", "driver", "inventory"]` subsets; ordinary
+  customers have `roles: []`. `disabled` remains the account-wide access gate.
+- Authorization badges (`customer` / `employee`) are retired. Do not read,
+  write, display, or require them. Removing staff roles leaves customer access.
+- API middleware re-reads account permissions on requests, so revoking a role
+  does not depend on an old session expiring. Existing signed sessions remain
+  compatible; new sessions and account responses omit badges.
+- `src/migrations/20261022AccountRoles.ts` is dry-run by default. Supply
+  `--backup /private/path/accounts.json`; add `--apply` only for application.
+  It backs up typed Firestore account values and safe Auth metadata before
+  writes, removes badges, preserves existing staff roles/settings/identity,
+  preserves disabled restrictions, and creates any missing Auth-user account
+  records with no staff roles. Unknown role formats abort before writes.
+  Apply through the production API container after frontend deployment.

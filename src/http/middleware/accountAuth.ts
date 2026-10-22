@@ -35,7 +35,6 @@ export async function requireAccountAuth(
 
       req.accountAuth = {
         ...session,
-        badges: account.badges,
         email: account.email || session.email,
         roles: account.roles,
         settings: account.settings,
@@ -53,7 +52,6 @@ export async function requireAccountAuth(
     }
 
     req.accountAuth = {
-      badges: account.badges,
       email: account.email || (typeof decoded.email === "string" ? decoded.email : ""),
       exp: Math.floor(Date.now() / 1000) + 60,
       roles: account.roles,
@@ -71,7 +69,7 @@ export async function requireAccountAuth(
 
 export function requireAccountRole(role: AccountRole) {
   return (req: AccountAuthedRequest, res: Response, next: NextFunction) => {
-    if (!req.accountAuth?.badges.includes("employee") || !req.accountAuth.roles.includes(role)) {
+    if (!req.accountAuth?.roles.includes(role)) {
       return res.status(403).json({
         message: `${role} access is required.`,
       });

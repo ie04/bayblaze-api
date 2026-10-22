@@ -23,7 +23,8 @@
     "medusa:migrate": "npm run backend:docker:migrate --prefix medusa",
     "medusa:docker:up": "npm run backend:docker:up --prefix medusa",
     "medusa:docker:logs": "npm run backend:docker:logs --prefix medusa",
-    "medusa:seed:bayblaze": "npm run backend:seed:bayblaze --prefix medusa"
+    "medusa:seed:bayblaze": "npm run backend:seed:bayblaze --prefix medusa",
+    "migrate:account-roles": "tsx src/migrations/20261022AccountRoles.ts"
   },
   "dependencies": {
     "busboy": "^1.6.0",

@@ -3,7 +3,7 @@ import { Router, type NextFunction, type Response } from "express";
 import { z } from "zod";
 
 import { requireAccountAuth, requireAccountRole, type AccountAuthedRequest } from "../../http/middleware/accountAuth";
-import { accountBadges, accountRoles } from "../accounts/accountTypes";
+import { accountRoles } from "../accounts/accountTypes";
 import { ApiRequestError } from "../drivers/driverWorkflowService";
 import {
   createAdminCoverageArea,
@@ -36,7 +36,6 @@ import {
 } from "./adminService";
 
 const accountUpdateSchema = z.object({
-  badges: z.array(z.enum(accountBadges)).optional(),
   disabled: z.boolean().optional(),
   displayName: z.string().optional(),
   roles: z.array(z.enum(accountRoles)).optional(),

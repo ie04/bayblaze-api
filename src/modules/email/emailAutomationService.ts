@@ -620,7 +620,6 @@ async function resolvePromotionalRecipients(campaign: PromotionalEmailCampaign) 
   if (campaign.recipientMode === "customers" || campaign.recipientMode === "combined") {
     const snapshot = await getBayblazeFirestore()
       .collection("accounts")
-      .where("badges", "array-contains", "customer")
       .limit(maxPromotionalEmailRecipients)
       .get();
 

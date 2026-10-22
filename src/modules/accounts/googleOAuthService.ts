@@ -10,7 +10,6 @@ import { ApiRequestError } from "../drivers/driverWorkflowService";
 import {
   createSessionResponse,
   ensureAccountRecord,
-  getAccount,
   parseEmail,
 } from "./accountService";
 
@@ -107,15 +106,12 @@ export async function completeGoogleOAuth(input: {
     email,
   });
   const displayName = googleProfile.name || authUser.displayName || "";
-  const existingAccount = await getAccount(authUser.uid);
   const account = await ensureAccountRecord(authUser.uid, email, {
-    badges: state.commerce === "storefront"
-      ? [...(existingAccount?.badges ?? []), "customer"]
-      : existingAccount?.badges ?? ["customer"],
     displayName,
   });
+  if (account.disabled) throw new ApiRequestError(403, "This BayBlaze account is disabled.");
   const medusaSession =
-    state.commerce === "storefront" && account.badges.includes("customer")
+    state.commerce === "storefront"
       ? await createMedusaCustomerSession({
           email,
           firstName: googleProfile.given_name,

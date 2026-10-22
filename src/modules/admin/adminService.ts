@@ -2,7 +2,7 @@ import { forwardAdminOrderDeleteRequest, forwardAdminOrderDetailRequest, forward
 import { getBayblazeFirestore } from "../../clients/firebaseAdminClient";
 import { sendUpstreamJson } from "../../http/upstream";
 import { getAccount, searchAccounts, updateAccountAccess } from "../accounts/accountService";
-import type { AccountBadge, AccountRole } from "../accounts/accountTypes";
+import type { AccountRole } from "../accounts/accountTypes";
 import {
   adminPromoCodeCategory,
   createDiscountCode,
@@ -85,7 +85,6 @@ export async function updateAdminAccount(
   input: {
     disabled?: boolean;
     displayName?: string;
-    badges?: AccountBadge[];
     roles?: AccountRole[];
     settings?: { ageVerificationDisabled?: boolean };
   },

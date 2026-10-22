@@ -121,9 +121,9 @@ test("admin vehicle endpoints reject unauthenticated reads and writes", async ()
   } finally { server.close(); await once(server, "close"); }
 });
 
-test("vehicle administration requires employee and admin role together", async () => {
+test("vehicle administration requires the admin role", async () => {
   const { requireAccountRole } = await import("../src/http/middleware/accountAuth");
-  for (const account of [{ badges: ["customer"], roles: ["admin"] }, { badges: ["employee"], roles: ["driver"] }]) {
+  for (const account of [{ roles: [] }, { roles: ["driver"] }]) {
     let status = 0; let called = false;
     const response = { status(code: number) { status = code; return this; }, json() {} };
     requireAccountRole("admin")({ accountAuth: account } as never, response as never, () => { called = true; });
