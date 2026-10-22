@@ -349,3 +349,13 @@ Troubleshooting deploys:
 - The label-printer agent and Medusa subscriber must remain idempotent. One
   successful order should create one stable label print job; duplicate webhook,
   subscriber, or retry paths must not print duplicate physical labels.
+
+## October 2026 Public Inventory Image Origin
+
+- Set `BAYBLAZE_PUBLIC_MEDUSA_URL=https://api.bayblaze.net` in production.
+  The internal `MEDUSA_BACKEND_URL=http://medusa:9000` is unsuitable for browser
+  image links. The production Compose file now sets the public origin explicitly.
+- Historical internal-origin images were corrected with the repeatable
+  `deploy/repair-internal-image-urls.sql` transaction after a private database
+  backup. It repairs image/thumbnail fields and inventory-image metadata links.
+  Keep internal service routing separate from public media configuration.

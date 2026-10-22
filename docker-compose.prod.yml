@@ -50,6 +50,7 @@ services:
     env_file:
       - .env.production
     environment:
+      BAYBLAZE_PUBLIC_MEDUSA_URL: ${BAYBLAZE_PUBLIC_MEDUSA_URL:-https://api.bayblaze.net}
       BAYBLAZE_INVENTORY_IMAGE_UPLOAD_DIR: ${BAYBLAZE_INVENTORY_IMAGE_UPLOAD_DIR:-/app/uploads/bayblaze-inventory}
       PORT: "9000"
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}

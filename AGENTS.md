@@ -1358,3 +1358,21 @@ git push
   endpoint rejected a deliberately invalid code with `invalid_grant`, rather
   than a client configuration error. Full interactive login still requires a
   user to finish Google's sign-in screen.
+
+## October 2026 Inventory Image Public Origin Repair
+
+- Production Medusa must set `BAYBLAZE_PUBLIC_MEDUSA_URL=https://api.bayblaze.net`.
+  `MEDUSA_BACKEND_URL=http://medusa:9000` remains the internal API-to-commerce
+  address and must not be used as the public origin for uploaded images.
+- Production Compose supplies the public origin explicitly; local `.env.example`
+  uses `http://localhost:9000` for images served by local Medusa.
+- Repaired two image records and one product thumbnail that used the internal
+  Docker origin. A private pre-repair database dump lives on this workstation at
+  `~/.codex/backups/bayblaze/before-image-url-repair-2026-10-22.dump`.
+- `medusa/deploy/repair-internal-image-urls.sql` is an idempotent, transactional
+  repair for image/thumbnail columns and inventory-image URLs in product,
+  variant, image, inventory-item, and cart/order line-item metadata. Run via
+  `psql -v ON_ERROR_STOP=1` after a database backup; it is an operator repair,
+  not an automatic per-deployment migration.
+- New upload, public image GET, temporary-image cleanup, and inventory snapshot
+  checks pass against the public API. Reload inventory to refresh saved UI state.
