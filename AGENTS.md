@@ -1412,3 +1412,24 @@ git push
   preserves disabled restrictions, and creates any missing Auth-user account
   records with no staff roles. Unknown role formats abort before writes.
   Apply through the production API container after frontend deployment.
+
+### Completed account migration — October 22, 2026
+
+- Migrated all 11 canonical Firestore accounts and verified matching Auth users.
+  All 11 `badges` fields were removed; the two staff accounts retained their
+  exact roles. Identity, settings, disabled state, and creation metadata were
+  compared against typed pre-migration values and preserved. No accounts were
+  deleted or recreated. A subsequent dry run reports zero changes.
+- Private workstation backups:
+  `~/.codex/backups/bayblaze/accounts-before-role-refactor-2026-10-22.json` and
+  `~/.codex/backups/bayblaze/accounts-role-migration-2026-10-22.json`.
+  These contain typed Firestore values and safe Auth metadata, never password
+  hashes or provider credentials. Do not commit or publish them.
+- Deployed role-only API and Admin, Driver, Inventory, Storefront, and Win
+  frontends. Existing signed sessions are accepted; API account responses omit
+  badges. Staff can access customer rewards, while a customer session carrying
+  stale staff claims receives 403 at admin, driver, and inventory boundaries.
+- Driver allowlisting grants the driver role only when creating an approved new
+  driver account. Legacy driver password login requires the existing role and
+  must never restore a role removed through Admin. Disabled-account checks apply
+  to universal OAuth and both driver token paths.
